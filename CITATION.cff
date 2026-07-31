@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: "Defensive Boosting for Online Probabilistic Forecasting"
+message: "If you use this code, please cite the accompanying paper."
+type: software
+authors:
+  - family-names: Noarov
+    given-names: Georgy
+  - family-names: Roth
+    given-names: Aaron
+repository-code: "https://github.com/aaroth/defensive-boosting"
+license: MIT
+version: 0.1.0
+date-released: 2026-07-31

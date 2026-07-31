@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "defensive-boosting"
+version = "0.1.0"
+description = "Reproducible experiments for Defensive Boosting for Online Probabilistic Forecasting"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Georgy Noarov"},
+  {name = "Aaron Roth"},
+]
+dependencies = [
+  "numpy>=2.0,<3",
+  "pandas>=2.2,<3",
+  "scipy>=1.13,<2",
+  "matplotlib>=3.8,<4",
+  "requests>=2.31,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/aaroth/defensive-boosting"
+
+[tool.setuptools.packages.find]
+include = ["experiments*"]
