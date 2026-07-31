@@ -33,7 +33,13 @@ from .algorithms import (
     StronglyAdaptiveDefensiveBooster,
 )
 from . import __version__
-from .metrics import RunTrace, run_online_algorithm, summarize_trace
+from .metrics import (
+    RunTrace,
+    brier_aggregate_traces,
+    run_online_algorithm,
+    summarize_trace,
+    trace_from_probability_scores,
+)
 from .streams import StreamData, default_streams
 from .weak_learners import (
     DyadicFiniteSecondOrderLinearOracle,
@@ -69,6 +75,9 @@ def build_algorithms(
     osb_gamma: float,
     bbm_gamma: float,
     gain_oracle: str,
+    classifier_eta_multiplier: float = 1.0,
+    ogb_step_multiplier: float = 1.0,
+    edge_multiplier: float = 1.0,
     include_adaptive: bool = False,
     learner_sweep: List[int] | None = None,
 ) -> List:
@@ -77,7 +86,10 @@ def build_algorithms(
     if stream.weak_type == "finite":
         dim = stream.dim
         linear_eta = finite_hedge_eta(2 * dim, stream.T)
-        classifier_eta = finite_hedge_eta(dim, stream.T)
+        classifier_eta = min(
+            0.5,
+            classifier_eta_multiplier * finite_hedge_eta(dim, stream.T),
+        )
 
         if gain_oracle == "second_order":
             def gain_factory() -> FiniteSecondOrderLinearOracle:
@@ -104,15 +116,28 @@ def build_algorithms(
             raise ValueError(f"unknown gain oracle: {gain_oracle}")
 
         def classifier_factory() -> LinearPerceptronClassifier:
-            return LinearPerceptronClassifier(dim=dim, radius=1.0, eta=1.0)
+            return LinearPerceptronClassifier(
+                dim=dim,
+                radius=1.0,
+                eta=classifier_eta_multiplier,
+            )
 
     else:
         raise ValueError(f"unknown weak_type: {stream.weak_type}")
 
-    # StreamData.gamma_hint is a correlation edge.  Chen--Lin--Lu denote half
-    # that correlation by gamma, while Online BBM uses the correlation itself.
-    osb_gamma_value = 0.5 * stream.gamma_hint if stream.gamma_hint is not None else osb_gamma
-    bbm_gamma_value = stream.gamma_hint if stream.gamma_hint is not None else bbm_gamma
+    # Both classification papers parameterize gamma as advantage over 1/2
+    # error. This need not equal half the correlation edge of the real-valued
+    # weak class used by the paper's theorem because the classifiers threshold
+    # each weak score before prediction.
+    classification_advantage = stream.classification_advantage_hint
+    osb_gamma_value = edge_multiplier * (
+        classification_advantage if classification_advantage is not None else osb_gamma
+    )
+    bbm_gamma_value = edge_multiplier * (
+        classification_advantage if classification_advantage is not None else bbm_gamma
+    )
+    if not 0.0 < bbm_gamma_value < 0.5:
+        raise ValueError("the Online BBM target advantage must lie in (0, 1/2)")
     algos = [
         DefensiveBooster(gain_factory, name="defensive"),
         OnlineSquaredLossRegressor(gain_factory, name="unboosted"),
@@ -147,7 +172,15 @@ def build_algorithms(
         bbm_counts = [bbm_learners]
         osb_counts = [osb_learners]
     for n in ogb_counts:
-        algos.append(OnlineGradientBoosting(gain_factory, n_learners=n, name=f"ogb_N={n}"))
+        base_eta = 1.0 if n == 1 else math.log(n) / n
+        algos.append(
+            OnlineGradientBoosting(
+                gain_factory,
+                n_learners=n,
+                eta=ogb_step_multiplier * base_eta,
+                name=f"ogb_N={n}",
+            )
+        )
     for n in bbm_counts:
         algos.append(
             OnlineBBM(
@@ -179,8 +212,9 @@ def run_suite(args: argparse.Namespace) -> tuple[List[Dict], List[RunTrace]]:
         from .real_streams import real_streams
 
         if args.progress:
+            limit = "all" if args.real_max_rows is None else str(args.real_max_rows)
             print(
-                f"Loading real datasets (up to {args.real_max_rows} rows each, dimension {args.real_dim})",
+                f"Loading real datasets (up to {limit} rows each, dimension {args.real_dim})",
                 flush=True,
             )
 
@@ -220,6 +254,9 @@ def run_suite(args: argparse.Namespace) -> tuple[List[Dict], List[RunTrace]]:
             osb_gamma=args.osb_gamma,
             bbm_gamma=args.bbm_gamma,
             gain_oracle=args.gain_oracle,
+            classifier_eta_multiplier=args.classifier_eta_multiplier,
+            ogb_step_multiplier=args.ogb_step_multiplier,
+            edge_multiplier=args.edge_multiplier,
             include_adaptive=args.adaptive_defensive,
             learner_sweep=args.learner_sweep,
         )
@@ -229,11 +266,15 @@ def run_suite(args: argparse.Namespace) -> tuple[List[Dict], List[RunTrace]]:
             missing = requested - {algorithm.name for algorithm in algorithms}
             if missing:
                 raise ValueError(f"unknown or unavailable algorithms: {sorted(missing)}")
+        stream_traces: Dict[str, RunTrace] = {}
+        stream_elapsed: Dict[str, float] = {}
         for algo in algorithms:
             start = time.perf_counter()
             trace = run_online_algorithm(algo, stream, seed=seed)
             elapsed = time.perf_counter() - start
             traces.append(trace)
+            stream_traces[trace.algorithm] = trace
+            stream_elapsed[trace.algorithm] = elapsed
             summary = summarize_trace(trace)
             summary["gain_oracle"] = args.gain_oracle
             summary["elapsed_seconds"] = float(elapsed)
@@ -248,6 +289,50 @@ def run_suite(args: argparse.Namespace) -> tuple[List[Dict], List[RunTrace]]:
                     f"(suite {suite_elapsed / 60.0:.1f}m)",
                     flush=True,
                 )
+
+        if not args.algorithm_filter:
+            counts = (
+                sorted(set(args.learner_sweep))
+                if args.learner_sweep
+                else sorted({args.ogb_learners, args.bbm_learners, args.osb_learners})
+            )
+            for n in counts:
+                component_names = [f"ogb_N={n}", f"bbm_N={n}", f"osboost_N={n}"]
+                if args.brier_aggregator and all(name in stream_traces for name in component_names):
+                    component_elapsed = sum(stream_elapsed[name] for name in component_names)
+                    aggregate_trace = brier_aggregate_traces(
+                        [stream_traces[name] for name in component_names],
+                        algorithm=f"brier_aggregator_N={n}",
+                        eta=0.5,
+                    )
+                    traces.append(aggregate_trace)
+                    summary = summarize_trace(aggregate_trace)
+                    summary["gain_oracle"] = args.gain_oracle
+                    summary["elapsed_seconds"] = float(component_elapsed)
+                    summary["microseconds_per_round"] = float(
+                        1_000_000.0 * component_elapsed / stream.T
+                    )
+                    summaries.append(summary)
+
+                bbm_name = f"bbm_N={n}"
+                if args.bbm_vote_diagnostic and bbm_name in stream_traces:
+                    bbm_trace = stream_traces[bbm_name]
+                    margin = bbm_trace.auxiliary.get("bbm_margin")
+                    if margin is not None:
+                        vote_trace = trace_from_probability_scores(
+                            stream,
+                            algorithm=f"bbm_vote_N={n}",
+                            seed=seed,
+                            probabilities=(margin + 1.0) / 2.0,
+                        )
+                        traces.append(vote_trace)
+                        summary = summarize_trace(vote_trace)
+                        summary["gain_oracle"] = args.gain_oracle
+                        summary["elapsed_seconds"] = float(stream_elapsed[bbm_name])
+                        summary["microseconds_per_round"] = float(
+                            1_000_000.0 * stream_elapsed[bbm_name] / stream.T
+                        )
+                        summaries.append(summary)
     return summaries, traces
 
 
@@ -286,6 +371,8 @@ def write_outputs(args: argparse.Namespace, summaries: List[Dict], traces: List[
         npz_payload[prefix + "__self_residual_corrs"] = trace.self_residual_corrs
         npz_payload[prefix + "__hard_core_edges"] = trace.hard_core_edges
         npz_payload[prefix + "__hard_core_densities"] = trace.hard_core_densities
+        for key, values in trace.auxiliary.items():
+            npz_payload[prefix + f"__aux__{key}"] = values
     np.savez_compressed(out_dir / "traces.npz", **npz_payload)
 
     if args.plots:
@@ -293,6 +380,7 @@ def write_outputs(args: argparse.Namespace, summaries: List[Dict], traces: List[
             plot_adaptive_drift_comparison,
             plot_adaptive_real_comparison,
             plot_local_hard_core_evolution,
+            plot_bbm_vote_diagnostic,
             plot_real_summary,
             plot_traces,
         )
@@ -301,6 +389,9 @@ def write_outputs(args: argparse.Namespace, summaries: List[Dict], traces: List[
         real_summary = plot_real_summary(aggregate, out_dir / "plots")
         if real_summary is not None:
             plot_paths.append(real_summary)
+        bbm_vote = plot_bbm_vote_diagnostic(aggregate, out_dir / "plots")
+        if bbm_vote is not None:
+            plot_paths.append(bbm_vote)
         adaptive_real = plot_adaptive_real_comparison(traces, out_dir / "plots")
         if adaptive_real is not None:
             plot_paths.append(adaptive_real)
@@ -412,9 +503,9 @@ def write_markdown_summary(
         "",
         "This directory is generated by `python3 -m experiments.run`.",
         "",
-        "The compared algorithms are the Defensive Booster, single-learner unboosted regression and classification controls, online gradient boosting for squared loss, Beygelzimer-Kale-Luo Online BBM, and Chen-Lin-Lu online SmoothBoost with the OCP combiner." + adaptive_sentence + " Labels are encoded in {-1,1}, and prediction scores in [-1,1] are converted to probabilities before scoring. The unboosted classifier and BBM make hard binary predictions, so their Brier score is the Brier score of the induced 0/1 probability forecast.",
+        "The compared algorithms are the Defensive Booster, single-learner unboosted regression and classification controls, online gradient boosting for squared loss, Beygelzimer-Kale-Luo Online BBM, Chen-Lin-Lu online SmoothBoost with the OCP combiner, and a causal Brier-loss aggregator over the three ensembles." + adaptive_sentence + " Labels are encoded in {-1,1}, and prediction scores in [-1,1] are converted to probabilities before scoring. The unboosted classifier and BBM make hard binary predictions, so their Brier score is the Brier score of the induced 0/1 probability forecast. The BBM-vote row is a separate diagnostic that scores its normalized raw vote as a probability.",
         "",
-        f"All runs use one global tuning regime rather than per-dataset hyperparameter selection. Linear-loss methods use the `{gain_oracle}` oracle variant. The Defensive Booster uses the parameter-free scalar adaptive-OGD updates specified in the paper. OGB, BBM, and OSBoost use the requested number of weak learners or learner-sweep values; OGB uses stage step `(log N)/N` for `N > 1` and step `1` for `N = 1`. BBM and OSBoost use `gamma=0.1` on real data. On synthetic streams with known correlation edge `delta`, BBM receives `delta` and OSBoost receives `delta/2`, matching the two papers' parameter conventions.",
+        f"All runs use one global tuning regime rather than per-dataset hyperparameter selection. Linear-loss methods use the `{gain_oracle}` oracle variant. The Defensive Booster uses the parameter-free scalar adaptive-OGD updates specified in the paper. OGB, BBM, and OSBoost use the requested number of weak learners or learner-sweep values; OGB uses stage step `(log N)/N` for `N > 1` and step `1` for `N = 1`. BBM and OSBoost both use target classification advantage `gamma=0.1`. The real-valued correlation edge used by the paper's theorem is stored separately from this classification parameter.",
         "",
         "## Aggregate metrics",
         "",
@@ -445,7 +536,11 @@ def write_markdown_summary(
         lines.append("## Plots")
         lines.append("")
         for p in plot_paths:
-            lines.append(f"- `{p}`")
+            try:
+                display_path = p.relative_to(Path.cwd())
+            except ValueError:
+                display_path = p
+            lines.append(f"- `{display_path}`")
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -472,7 +567,11 @@ def _algorithm_sort_key(name: str) -> tuple[int, int, str]:
         return (5, n, name)
     if name.startswith("osboost"):
         return (6, n, name)
-    return (7, n, name)
+    if name.startswith("brier_aggregator"):
+        return (7, n, name)
+    if name.startswith("bbm_vote"):
+        return (8, n, name)
+    return (9, n, name)
 
 
 def parse_args() -> argparse.Namespace:
@@ -485,7 +584,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", default="experiments/out/latest", help="output directory")
     parser.add_argument("--T", type=int, default=3000, help="rounds per stream")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2], help="random seeds")
-    parser.add_argument("--real-max-rows", type=int, default=50000)
+    parser.add_argument(
+        "--real-max-rows",
+        type=int,
+        default=None,
+        help="optional prefix length for each real stream; default uses every row",
+    )
     parser.add_argument("--real-dim", type=int, default=128)
     parser.add_argument(
         "--drift-max-rows",
@@ -506,6 +610,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--bbm-gamma", type=float, default=0.1)
     parser.add_argument("--osb-gamma", type=float, default=0.1)
+    parser.add_argument("--classifier-eta-multiplier", type=float, default=1.0)
+    parser.add_argument("--ogb-step-multiplier", type=float, default=1.0)
+    parser.add_argument("--edge-multiplier", type=float, default=1.0)
+    parser.add_argument(
+        "--brier-aggregator",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="causally aggregate OGB, BBM, and OSBoost forecasts by Brier loss",
+    )
+    parser.add_argument(
+        "--bbm-vote-diagnostic",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="also score Online BBM's normalized raw vote as a probability diagnostic",
+    )
     parser.add_argument(
         "--adaptive-defensive",
         action=argparse.BooleanOptionalAction,
@@ -525,12 +644,12 @@ def parse_args() -> argparse.Namespace:
     if args.quick:
         args.T = 600
         args.seeds = [0]
-        args.real_max_rows = min(args.real_max_rows, 1500)
+        args.real_max_rows = 1500
         args.real_dim = min(args.real_dim, 64)
         args.drift_max_rows = 1500
         args.ogb_learners = 10
-        args.bbm_learners = 20
-        args.osb_learners = 20
+        args.bbm_learners = 10
+        args.osb_learners = 10
         if args.out == "experiments/out/latest":
             args.out = "experiments/out/quick"
     return args

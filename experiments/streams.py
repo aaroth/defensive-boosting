@@ -16,7 +16,8 @@ class StreamData:
     y: np.ndarray
     weak_type: str
     description: str
-    gamma_hint: float | None = None
+    correlation_edge_hint: float | None = None
+    classification_advantage_hint: float | None = None
 
     @property
     def T(self) -> int:
@@ -46,7 +47,8 @@ def heterogeneous_margin(T: int, gamma: float = 0.12, seed: int = 0) -> StreamDa
         X=X,
         y=y,
         weak_type="finite",
-        gamma_hint=gamma,
+        correlation_edge_hint=gamma,
+        classification_advantage_hint=0.1,
         description=(
             "One finite weak feature has the correct sign on every round but "
             "heterogeneous magnitude. Smooth weak learning holds, while the "
@@ -92,7 +94,8 @@ def group_subset_positive(
         X=X,
         y=y,
         weak_type="finite",
-        gamma_hint=edge,
+        correlation_edge_hint=edge,
+        classification_advantage_hint=edge / 2.0,
         description=(
             "Each context consists abstractly of a group and an observed sign "
             "feature equal to the label. A large finite weak class satisfies "
@@ -154,10 +157,12 @@ def group_subset_heterogeneous_margin(
         X=X,
         y=y,
         weak_type="finite",
-        gamma_hint=edge,
+        correlation_edge_hint=edge,
+        classification_advantage_hint=(2.0 * subset_size / n_groups - 1.0) / 2.0,
         description=(
-            "Each context consists of a group, an observed sign equal to the "
-            "label, and a magnitude in {delta, 1}. A large finite weak class "
+            "The latent generator uses a group, a sign, and a magnitude in "
+            "{delta, 1}; algorithms receive only the resulting vector of weak-rule "
+            "values. A large finite weak class "
             "satisfies smooth weak learning, but the useful group-subset rule "
             "changes with the reweighting and heterogeneous magnitudes obstruct "
             "a single accurate affine span score."
@@ -193,7 +198,8 @@ def planted_decoy_margin(
         X=X,
         y=y,
         weak_type="finite",
-        gamma_hint=gamma,
+        correlation_edge_hint=gamma,
+        classification_advantage_hint=0.1,
         description=(
             "A large finite class contains one sign-perfect heterogeneous-margin "
             "weak rule and many decoys.  Smooth weak learning holds, while the "
@@ -222,7 +228,8 @@ def many_weak_features(
         X=X,
         y=y,
         weak_type="finite",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "Each coordinate has only small edge, so a constant-edge smooth weak "
             "learning condition is a poor description. A linear combination of "
@@ -257,7 +264,8 @@ def linear_span_fallback(
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "The weak class is the infinite Euclidean linear ball. Smooth weak "
             "learning with a constant edge fails on near-margin subsets, "
@@ -290,7 +298,8 @@ def mixed_linear_random_label_mixture(
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "Labels are independently randomized on a fixed fraction of rounds. "
             "Those rounds give a smooth low-edge weighting, while the best linear "
@@ -310,7 +319,8 @@ def random_labels(T: int, d: int = 30, seed: int = 0) -> StreamData:
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "Pure random labels. This is a sanity check: the hard-core edge "
             "certificate should be small and no method should beat chance by much."

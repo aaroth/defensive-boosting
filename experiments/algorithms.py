@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Union
 
 import numpy as np
 
@@ -19,7 +19,7 @@ from .weak_learners import (
 )
 
 
-RoundResult = Dict[str, float]
+RoundResult = Dict[str, Union[float, str, Dict[str, float]]]
 GainOracleFactory = Callable[[], LinearGainOracle]
 ClassifierFactory = Callable[[], WeightedClassifier]
 
@@ -33,7 +33,7 @@ class OnlineAlgorithm:
 
 @dataclass
 class DefensiveBooster(OnlineAlgorithm):
-    """The Defensive Booster from the paper."""
+    """The Defensive Booster from boosting.tex."""
 
     weak_factory: GainOracleFactory
     name: str = "defensive"
@@ -211,12 +211,13 @@ class OnlineBBM(OnlineAlgorithm):
     def __post_init__(self) -> None:
         if self.n_learners < 1:
             raise ValueError("Online BBM requires at least one weak learner")
-        if not 0.0 < self.gamma < 1.0:
-            raise ValueError("Online BBM requires gamma in (0, 1)")
+        if not 0.0 < self.gamma < 0.5:
+            raise ValueError("Online BBM requires gamma in (0, 1/2)")
         self.learners = [self.classifier_factory() for _ in range(self.n_learners)]
         self._log_pmf: List[np.ndarray] = []
         self._log_pmf_max: List[float] = []
-        p = 0.5 + 0.5 * float(self.gamma)
+        # Beygelzimer--Kale--Luo define gamma by weak error 1/2-gamma.
+        p = 0.5 + float(self.gamma)
         q = 1.0 - p
         for remaining in range(self.n_learners):
             logs = np.empty(remaining + 1, dtype=float)
@@ -326,5 +327,5 @@ def _round_result(name: str, score: float, y: int, extra: Dict[str, float] | Non
         "randomized_error": float((1.0 - float(y) * score) / 2.0),
     }
     if extra:
-        result.update({k: float(v) for k, v in extra.items()})
+        result["extra"] = {k: float(v) for k, v in extra.items()}
     return result

@@ -78,7 +78,7 @@ class RealStreamSpec:
 
 def real_streams(
     *,
-    max_rows: int | None = 50_000,
+    max_rows: int | None = None,
     dim: int = 128,
     progress: bool = False,
 ) -> list[StreamData]:
@@ -290,7 +290,7 @@ def _hashed_frame(
     return _normalize_rows(X), y
 
 
-def bank_marketing(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamData:
+def bank_marketing(*, max_rows: int | None = None, dim: int = 128) -> StreamData:
     """Portuguese bank telemarketing stream, preserving the UCI date order."""
 
     cache = PROCESSED_DIR / f"bank_marketing_online_v2_n{max_rows}_d{dim}.npz"
@@ -326,7 +326,8 @@ def bank_marketing(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamDa
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "UCI Bank Marketing, ordered by campaign date. The target is term "
             "deposit subscription; the call duration field is dropped because "
@@ -345,7 +346,7 @@ def _load_arff_zip(url: str, zip_name: str, suffix: str) -> pd.DataFrame:
     return _decode_frame(pd.DataFrame(data))
 
 
-def moa_electricity(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamData:
+def moa_electricity(*, max_rows: int | None = None, dim: int = 128) -> StreamData:
     """MOA Electricity stream from the NSW electricity market."""
 
     cache = PROCESSED_DIR / f"moa_electricity_online_v2_n{max_rows}_d{dim}.npz"
@@ -361,7 +362,8 @@ def moa_electricity(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamD
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "MOA Electricity/ELEC stream: NSW electricity-market price movement "
             "relative to a moving average, in chronological market order."
@@ -371,7 +373,7 @@ def moa_electricity(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamD
     return stream
 
 
-def moa_airlines(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamData:
+def moa_airlines(*, max_rows: int | None = None, dim: int = 128) -> StreamData:
     """MOA Airlines delay stream."""
 
     cache = PROCESSED_DIR / f"moa_airlines_online_v2_n{max_rows}_d{dim}.npz"
@@ -386,14 +388,15 @@ def moa_airlines(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamData
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description="MOA Airlines stream: predict whether a flight will be delayed from scheduled-flight attributes.",
     )
     _save_stream(cache, stream)
     return stream
 
 
-def occupancy_detection(*, max_rows: int | None = 50_000, dim: int = 128) -> StreamData:
+def occupancy_detection(*, max_rows: int | None = None, dim: int = 128) -> StreamData:
     """UCI office-occupancy measurements merged in timestamp order."""
 
     cache = PROCESSED_DIR / f"uci_occupancy_online_v2_n{max_rows}_d{dim}.npz"
@@ -442,7 +445,8 @@ def occupancy_detection(*, max_rows: int | None = 50_000, dim: int = 128) -> Str
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "UCI Occupancy Detection stream: minute-level office sensor "
             "measurements ordered by their recorded timestamps, with occupancy "
@@ -496,7 +500,8 @@ def insects_drift(*, variant: str, max_rows: int | None = None) -> StreamData:
         X=X,
         y=y,
         weak_type="linear",
-        gamma_hint=None,
+        correlation_edge_hint=None,
+        classification_advantage_hint=None,
         description=(
             "INSECTS optical-sensor benchmark with "
             f"{config['description']}. The binary target is Aedes albopictus "
@@ -516,17 +521,37 @@ def _save_stream(path: Path, stream: StreamData) -> None:
         y=stream.y,
         weak_type=stream.weak_type,
         description=stream.description,
-        gamma_hint=np.nan if stream.gamma_hint is None else float(stream.gamma_hint),
+        correlation_edge_hint=(
+            np.nan
+            if stream.correlation_edge_hint is None
+            else float(stream.correlation_edge_hint)
+        ),
+        classification_advantage_hint=(
+            np.nan
+            if stream.classification_advantage_hint is None
+            else float(stream.classification_advantage_hint)
+        ),
     )
 
 
 def _stream_from_cache(data: np.lib.npyio.NpzFile) -> StreamData:
-    gamma = float(data["gamma_hint"])
+    if "correlation_edge_hint" in data.files:
+        correlation_edge = float(data["correlation_edge_hint"])
+    else:
+        correlation_edge = float(data["gamma_hint"])
+    classification_advantage = (
+        float(data["classification_advantage_hint"])
+        if "classification_advantage_hint" in data.files
+        else np.nan
+    )
     return StreamData(
         name=str(data["name"]),
         X=np.asarray(data["X"], dtype=float),
         y=np.asarray(data["y"], dtype=int),
         weak_type=str(data["weak_type"]),
         description=str(data["description"]),
-        gamma_hint=None if np.isnan(gamma) else gamma,
+        correlation_edge_hint=None if np.isnan(correlation_edge) else correlation_edge,
+        classification_advantage_hint=(
+            None if np.isnan(classification_advantage) else classification_advantage
+        ),
     )

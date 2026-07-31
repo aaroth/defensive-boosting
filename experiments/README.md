@@ -4,7 +4,7 @@ For environment setup and the one-command paper reproduction workflow, see
 the [repository README](../README.md).  The commands below expose the
 underlying runner directly.
 
-This package compares six main online binary-prediction procedures on shared datasets and includes the strongly adaptive extension studied in the appendix:
+This package compares seven main online binary-prediction procedures on shared datasets and includes the strongly adaptive extension studied in the appendix:
 
 - `defensive`: the Defensive Booster from the paper.
 - `adaptive_defensive`: the strongly adaptive Defensive Booster, enabled with
@@ -14,6 +14,12 @@ This package compares six main online binary-prediction procedures on shared dat
 - `ogb`: online gradient boosting for squared loss, specialized from Beygelzimer, Hazan, Kale, and Luo.
 - `bbm`: Beygelzimer, Kale, and Luo Online BBM, the optimal-rate binary online boosting baseline.
 - `osboost`: Chen, Lin, and Lu online SmoothBoost with the online convex programming combiner and importance-weighted weak-learner updates.
+- `brier_aggregator`: a causal exponential-weights aggregator over OGB,
+  Online BBM, and OSBoost under Brier loss. It runs all three ensembles.
+
+The output also includes `bbm_vote`, an appendix diagnostic that interprets
+Online BBM's normalized raw vote as a probability. The primary Online BBM
+baseline remains the hard prediction specified by the algorithm.
 
 Run a smoke test:
 
@@ -37,17 +43,23 @@ python3 -m experiments.run --T 3000 \
   --learner-sweep 1 5 20 100 --out experiments/out/sweep
 ```
 
+Run the one-at-a-time hyperparameter sensitivity check:
+
+```bash
+python3 scripts/run_sensitivity.py
+```
+
 Run the real-data suite used in the paper:
 
 ```bash
-python3 -m experiments.run --suite real --real-max-rows 50000 --real-dim 128 \
+python3 -m experiments.run --suite real --real-dim 128 \
   --seeds 0 --out experiments/out/real_full
 ```
 
 Run the appendix comparison between the basic and strongly adaptive variants:
 
 ```bash
-python3 -m experiments.run --suite real --real-max-rows 50000 --real-dim 128 \
+python3 -m experiments.run --suite real --real-dim 128 \
   --seeds 0 --adaptive-defensive \
   --algorithm-filter defensive adaptive_defensive \
   --out experiments/out/adaptive_real
@@ -115,10 +127,10 @@ entropy-FTRL for finite classes and projected adaptive gradient ascent for
 Euclidean linear classes.  OGB, Online BBM, and OSBoost all use 100 weak
 learners in the main runs, or the requested values in a learner-count sweep;
 OGB uses the theory-suggested stage step `(log N)/N` for `N > 1` and step `1`
-for `N = 1`.  Online BBM and OSBoost use `gamma=0.1` on real streams.  If a
-synthetic stream has known correlation edge `delta`, Online BBM receives
-`delta`, while OSBoost receives `delta/2` because the OSBoost paper denotes
-correlation advantage `2 gamma`.  The finite classification learners used by unboosted
+for `N = 1`.  Online BBM and OSBoost both use target classification advantage
+`gamma=0.1`, where each paper defines gamma as the improvement over error
+`1/2`.  This is stored separately from the real-valued correlation edge used
+by the paper's theorem.  The finite classification learners used by unboosted
 classification, Online BBM, and OSBoost share the horizon-aware Hedge rate
 `min(0.5, sqrt(8 log(n_experts) / T))`; their linear counterparts share the
 same weighted projected-perceptron update.  No hyperparameter is selected
@@ -126,7 +138,13 @@ separately for an individual dataset.
 
 The synthetic datasets are designed to separate the guarantees:
 
-- `group_subset_heterogeneous`: each context contains a group, an observed sign equal to the signed label, and a magnitude in `{0.6, 1}`. The 210-rule finite class has edge at least `0.12` under every reweighting, but the changing magnitude prevents any one affine span score from fitting all rounds exactly. The useful subset rule also changes with the reweighting.
+- `group_subset_heterogeneous`: a latent generator uses a group, a sign equal
+  to the signed label, and a magnitude in `{0.6, 1}`. Algorithms receive only
+  the resulting vector of 210 weak-rule values, not those latent variables as
+  separate features. The real-valued class has edge at least `0.12` under every
+  reweighting, but the changing magnitude prevents any one affine span score
+  from fitting all rounds exactly. The useful subset rule also changes with
+  the reweighting.
 - `planted_decoy_margin`: a large finite class contains one sign-perfect heterogeneous-margin weak rule among many decoys, giving a weak-to-strong favorable regime for OSBoost.
 - `heterogeneous_margin`: a one-rule sanity check where smooth weak learning holds, but the one-dimensional span still has constant squared loss.
 - `linear_span_fallback`: the weak class is the infinite Euclidean linear ball; the smooth weak-learning condition fails on near-margin subsets, but a scaled linear span predictor is accurate.
@@ -147,6 +165,12 @@ The synthetic datasets are designed to separate the guarantees:
 - `ogb` implements Algorithm 1 of Beygelzimer, Hazan, Kale, and Luo, "Online Gradient Boosting", specialized to one-dimensional squared loss with predictions projected to `[-1,1]`.
 - `bbm` implements the Online BBM algorithm of Beygelzimer, Kale, and Luo, "Optimal and Adaptive Algorithms for Online Boosting", using the importance-weighted variant.  BBM outputs hard binary predictions; its reported Brier score is the Brier score of the induced `0/1` probability forecast.
 - `osboost` implements Algorithm 1 of Chen, Lin, and Lu, "An Online Boosting Algorithm with Theoretical Justifications", using the SmoothBoost-style weights and the OCP simplex combiner.  As in their experiments, weak learners receive importance-weighted updates rather than sampled updates.
+- `brier_aggregator` runs OGB, Online BBM, and OSBoost in parallel and causally
+  averages their probability forecasts with exponential weights under Brier
+  loss. With three `N`-learner constituents it maintains `3N` weak learners.
+- `bbm_vote` is a diagnostic, not a separate trained algorithm: it scores
+  Online BBM's normalized raw ensemble vote as a probability. Online BBM's
+  specified hard prediction remains the primary baseline.
 
 The baselines are therefore intentionally theory-facing rather than tuned production implementations.
 

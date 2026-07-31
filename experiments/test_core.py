@@ -9,7 +9,12 @@ import numpy as np
 import pandas as pd
 
 from .algorithms import DefensiveBooster, OnlineBBM, OnlineGradientBoosting, OnlineSmoothBoost
-from .metrics import hard_core_edge, offline_span_diagnostics
+from .metrics import (
+    brier_aggregate_traces,
+    hard_core_edge,
+    offline_span_diagnostics,
+    trace_from_probability_scores,
+)
 from .real_streams import _hashed_frame, _online_standardize_matrix
 from .run import build_algorithms
 from .streams import group_subset_heterogeneous_margin
@@ -57,8 +62,53 @@ class BaselineConventionTest(unittest.TestCase):
         )
         bbm = next(algo for algo in algorithms if isinstance(algo, OnlineBBM))
         osboost = next(algo for algo in algorithms if isinstance(algo, OnlineSmoothBoost))
-        self.assertAlmostEqual(bbm.gamma, stream.gamma_hint)
-        self.assertAlmostEqual(osboost.gamma, stream.gamma_hint / 2.0)
+        self.assertAlmostEqual(bbm.gamma, stream.classification_advantage_hint)
+        self.assertAlmostEqual(osboost.gamma, stream.classification_advantage_hint)
+
+    def test_real_valued_and_classification_edges_are_distinct(self) -> None:
+        stream = group_subset_heterogeneous_margin(T=80, low_margin=0.6, seed=0)
+        self.assertAlmostEqual(stream.correlation_edge_hint, 0.12)
+        self.assertAlmostEqual(stream.classification_advantage_hint, 0.1)
+
+
+class BrierAggregatorTest(unittest.TestCase):
+    def _trace(self, stream, name: str, probabilities: np.ndarray):
+        return trace_from_probability_scores(
+            stream,
+            algorithm=name,
+            seed=0,
+            probabilities=probabilities,
+        )
+
+    def test_can_strictly_outperform_every_component(self) -> None:
+        stream = group_subset_heterogeneous_margin(T=80, low_margin=0.5, seed=0)
+        zero = self._trace(stream, "zero", np.zeros(stream.T))
+        one = self._trace(stream, "one", np.ones(stream.T))
+        aggregate = brier_aggregate_traces(
+            [zero, one],
+            algorithm="aggregate",
+            eta=0.5,
+        )
+        self.assertLess(np.mean(aggregate.brier_losses), 0.5)
+        self.assertAlmostEqual(np.mean(zero.brier_losses), 0.5)
+        self.assertAlmostEqual(np.mean(one.brier_losses), 0.5)
+
+    def test_mixability_bound(self) -> None:
+        stream = group_subset_heterogeneous_margin(T=80, low_margin=0.5, seed=1)
+        labels = (stream.y.astype(float) + 1.0) / 2.0
+        components = [
+            self._trace(stream, "constant-zero", np.zeros(stream.T)),
+            self._trace(stream, "constant-half", np.full(stream.T, 0.5)),
+            self._trace(stream, "perfect", labels),
+        ]
+        aggregate = brier_aggregate_traces(
+            components,
+            algorithm="aggregate",
+            eta=0.5,
+        )
+        aggregate_loss = float(np.sum(aggregate.brier_losses))
+        best_loss = min(float(np.sum(trace.brier_losses)) for trace in components)
+        self.assertLessEqual(aggregate_loss, best_loss + 2.0 * math.log(3.0) + 1e-12)
 
 
 class StreamConstructionTest(unittest.TestCase):

@@ -26,6 +26,10 @@ def _algorithm_color(name: str) -> str:
         return "#ff7f0e"
     if name == "unboosted_cls":
         return "#2ca02c"
+    if name.startswith("brier_aggregator"):
+        return "#222222"
+    if name.startswith("bbm_vote"):
+        return "#c084fc"
     if name.startswith("ogb"):
         return "#d62728"
     if name.startswith("bbm"):
@@ -44,6 +48,10 @@ def _pretty_algorithm(name: str) -> str:
         return "Unboosted reg."
     if name == "unboosted_cls":
         return "Unboosted cls."
+    if name.startswith("brier_aggregator"):
+        return "Brier aggregator"
+    if name.startswith("bbm_vote"):
+        return "Online BBM vote"
     if name.startswith("ogb"):
         return "OGB"
     if name.startswith("bbm"):
@@ -104,7 +112,11 @@ def _algorithm_sort_key(name: str) -> Tuple[int, int, str]:
         return (5, n, name)
     if name.startswith("osboost"):
         return (6, n, name)
-    return (7, n, name)
+    if name.startswith("brier_aggregator"):
+        return (7, n, name)
+    if name.startswith("bbm_vote"):
+        return (8, n, name)
+    return (9, n, name)
 
 
 def plot_traces(traces: Iterable[RunTrace], out_dir: Path) -> List[Path]:
@@ -123,6 +135,8 @@ def plot_traces(traces: Iterable[RunTrace], out_dir: Path) -> List[Path]:
             plt.figure(figsize=(7.2, 4.5))
             by_algo = {}
             for trace in stream_traces:
+                if trace.algorithm.startswith("bbm_vote"):
+                    continue
                 if metric_name == "brier_loss" and trace.algorithm == "unboosted_cls":
                     continue
                 by_algo.setdefault(trace.algorithm, []).append(cumulative(getattr(trace, attr)))
@@ -193,9 +207,10 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
         ogb = _sweep_points(by_algo, "ogb")
         bbm = _sweep_points(by_algo, "bbm")
         osboost = _sweep_points(by_algo, "osboost")
-        if not ogb and not bbm and not osboost:
+        aggregator = _sweep_points(by_algo, "brier_aggregator")
+        if not ogb and not bbm and not osboost and not aggregator:
             continue
-        fig, axes = plt.subplots(1, 2, figsize=(9.8, 3.65), sharex=True)
+        fig, axes = plt.subplots(1, 2, figsize=(10.4, 4.2), sharex=True)
         for ax, metric, ylabel in [
             (axes[0], "brier_loss", "final Brier loss"),
             (axes[1], "randomized_error", "final randomized error"),
@@ -204,9 +219,11 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
                 ("OGB", ogb, "#d62728"),
                 ("Online BBM", bbm, "#9467bd"),
                 ("OSBoost", osboost, "#8c564b"),
+                ("Brier aggregator", aggregator, "#222222"),
             ]:
                 if points:
-                    ns = np.array([p[0] for p in points], dtype=float)
+                    multiplier = 3.0 if label == "Brier aggregator" else 1.0
+                    ns = multiplier * np.array([p[0] for p in points], dtype=float)
                     means = np.array([p[1][f"{metric}_mean"] for p in points], dtype=float)
                     ses = np.array([p[1][f"{metric}_stderr"] for p in points], dtype=float)
                     ax.errorbar(ns, means, yerr=ses, label=label, color=color, marker="o", capsize=2.5)
@@ -221,14 +238,22 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
                     vals = by_algo[baseline]
                     ax.axhline(vals[f"{metric}_mean"], color=color, linestyle=linestyle, linewidth=1.6, label=_pretty_algorithm(baseline))
             ax.set_xscale("log")
-            ax.set_xticks([1, 5, 20, 100])
+            ax.set_xticks([1, 5, 20, 100, 300])
             ax.get_xaxis().set_major_formatter(ScalarFormatter())
-            ax.set_xlabel("number of weak learners N")
+            ax.set_xlabel("total maintained weak learners")
             ax.set_ylabel(ylabel)
             ax.grid(alpha=0.25)
-        axes[0].legend(fontsize=8)
-        fig.suptitle(_pretty_stream(stream_name), y=1.03)
-        fig.tight_layout()
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.suptitle(_pretty_stream(stream_name), y=0.99)
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.925),
+            ncol=4,
+            fontsize=8,
+        )
+        fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.80))
         path = out_dir / f"{stream_name}__compute_sweep.png"
         fig.savefig(path, dpi=180, bbox_inches="tight", facecolor="white", transparent=False)
         plt.close(fig)
@@ -257,6 +282,7 @@ def plot_real_summary(
         ("ogb_N=100", "OGB (100)", "#d62728"),
         ("bbm_N=100", "Online BBM (100)", "#9467bd"),
         ("osboost_N=100", "OSBoost (100)", "#8c564b"),
+        ("brier_aggregator_N=100", "Brier aggregator (300)", "#222222"),
     ]
     if not all(
         algorithm in aggregate[stream]
@@ -267,8 +293,8 @@ def plot_real_summary(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     x = np.arange(len(stream_order), dtype=float)
-    width = 0.16
-    fig, ax = plt.subplots(figsize=(9.4, 4.6))
+    width = 0.135
+    fig, ax = plt.subplots(figsize=(10.2, 4.7))
     for index, (algorithm, label, color) in enumerate(algorithm_order):
         ratios = []
         errors = []
@@ -298,9 +324,65 @@ def plot_real_summary(
     ax.set_ylabel("Brier loss / best method on dataset")
     ax.set_ylim(bottom=0.0)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(ncol=3, fontsize=9, title="Algorithm (weak learners)")
+    ax.legend(ncol=3, fontsize=8.5, title="Algorithm (weak learners)")
     fig.tight_layout()
     path = out_dir / "real_summary_brier.png"
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white", transparent=False)
+    plt.close(fig)
+    return path
+
+
+def plot_bbm_vote_diagnostic(
+    aggregate: Dict[str, Dict[str, Dict[str, float]]],
+    out_dir: Path,
+) -> Path | None:
+    """Compare Online BBM's specified hard output with its raw vote score."""
+
+    streams = [
+        ("planted_decoy_margin_d=200_gamma=0.12", "Planted decoy"),
+        ("group_subset_heterogeneous_m=10_k=6_delta=0.6", "Group subset"),
+    ]
+    algorithms = [
+        ("bbm_N=100", "Hard output", "#9467bd"),
+        ("bbm_vote_N=100", "Normalized vote", "#c084fc"),
+    ]
+    if not all(
+        stream in aggregate and all(name in aggregate[stream] for name, _, _ in algorithms)
+        for stream, _ in streams
+    ):
+        return None
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    x = np.arange(len(streams), dtype=float)
+    width = 0.34
+    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.55))
+    for ax, metric, ylabel in [
+        (axes[0], "brier_loss", "Brier loss"),
+        (axes[1], "randomized_error", "randomized error"),
+    ]:
+        for index, (algorithm, label, color) in enumerate(algorithms):
+            means = [aggregate[stream][algorithm][f"{metric}_mean"] for stream, _ in streams]
+            ses = [aggregate[stream][algorithm][f"{metric}_stderr"] for stream, _ in streams]
+            offset = (index - 0.5) * width
+            bars = ax.bar(x + offset, means, width, yerr=ses, capsize=2.5, label=label, color=color)
+            for bar, mean in zip(bars, means):
+                if mean < 1e-4:
+                    ax.annotate(
+                        r"$<10^{-4}$",
+                        (bar.get_x() + bar.get_width() / 2.0, 0.0),
+                        xytext=(0, 4),
+                        textcoords="offset points",
+                        ha="center",
+                        va="bottom",
+                        fontsize=7.5,
+                    )
+        ax.set_xticks(x)
+        ax.set_xticklabels([label for _, label in streams])
+        ax.set_ylabel(ylabel)
+        ax.grid(axis="y", alpha=0.25)
+    axes[0].legend(fontsize=8.5)
+    fig.tight_layout()
+    path = out_dir / "bbm_vote_diagnostic.png"
     fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white", transparent=False)
     plt.close(fig)
     return path

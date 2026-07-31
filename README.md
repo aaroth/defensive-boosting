@@ -55,6 +55,7 @@ python scripts/reproduce_paper.py sweep
 python scripts/reproduce_paper.py real
 python scripts/reproduce_paper.py adaptive-real
 python scripts/reproduce_paper.py drift
+python scripts/reproduce_paper.py sensitivity
 ```
 
 The targets correspond to the paper as follows:
@@ -66,6 +67,7 @@ The targets correspond to the paper as follows:
 | `real` | Four naturally ordered real streams and the introductory summary figure |
 | `adaptive-real` | Strongly adaptive comparison on the four real streams |
 | `drift` | INSECTS controlled-drift results and local hard-core diagnostics |
+| `sensitivity` | One-at-a-time checks of the OGB step, classifier learning rate, and target-edge parameter |
 
 By default, the script runs the unit tests, compares each `aggregate.json`
 with the corresponding file in `experiments/reference/`, and copies the

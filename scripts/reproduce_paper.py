@@ -38,7 +38,6 @@ TARGETS = {
     ],
     "real": [
         "--suite", "real",
-        "--real-max-rows", "50000",
         "--real-dim", "128",
         "--seeds", "0",
         "--gain-oracle", "second_order",
@@ -47,7 +46,6 @@ TARGETS = {
     ],
     "adaptive-real": [
         "--suite", "real",
-        "--real-max-rows", "50000",
         "--real-dim", "128",
         "--seeds", "0",
         "--adaptive-defensive",
@@ -65,6 +63,7 @@ TARGETS = {
         "--out", str(OUT_ROOT / "drift"),
         "--plots",
     ],
+    "sensitivity": [],
 }
 
 REFERENCE_FILES = {
@@ -80,6 +79,7 @@ FIGURE_MAP = {
         "mixed_linear_random_label_mixture_p=0.35__brier_loss.png": "random_label_mixture_brier_loss.png",
         "mixed_linear_random_label_mixture_p=0.35__certificate.png": "random_label_mixture_certificate.png",
         "random_labels__brier_loss.png": "random_labels_brier_loss.png",
+        "bbm_vote_diagnostic.png": "bbm_vote_diagnostic.png",
     },
     "sweep": {
         "group_subset_heterogeneous_m=10_k=6_delta=0.6__compute_sweep.png": "group_subset_compute_sweep.png",
@@ -98,6 +98,9 @@ FIGURE_MAP = {
         "adaptive_insects_brier.png": "adaptive_insects_brier.png",
         "adaptive_insects_abrupt_hard_core_evolution.png": "adaptive_insects_abrupt_hard_core_evolution.png",
     },
+    "sensitivity": {
+        "sensitivity.png": "hyperparameter_sensitivity.png",
+    },
 }
 
 
@@ -108,7 +111,15 @@ def run_command(command: list[str], *, dry_run: bool) -> None:
 
 
 def run_target(target: str, *, dry_run: bool) -> None:
-    command = [sys.executable, "-m", "experiments.run", *TARGETS[target]]
+    if target == "sensitivity":
+        command = [
+            sys.executable,
+            "scripts/run_sensitivity.py",
+            "--out",
+            str(OUT_ROOT / "sensitivity"),
+        ]
+    else:
+        command = [sys.executable, "-m", "experiments.run", *TARGETS[target]]
     run_command(command, dry_run=dry_run)
 
 
@@ -122,7 +133,7 @@ def verify_target(target: str) -> None:
 
 
 def sync_figures(target: str) -> None:
-    plot_dir = OUT_ROOT / target / "plots"
+    plot_dir = OUT_ROOT / target if target == "sensitivity" else OUT_ROOT / target / "plots"
     figure_dir = ROOT / "figures"
     figure_dir.mkdir(parents=True, exist_ok=True)
     for generated_name, paper_name in FIGURE_MAP[target].items():
