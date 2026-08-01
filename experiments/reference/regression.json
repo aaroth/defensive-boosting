@@ -1,6 +1,6 @@
 {
   "regression_appliances_energy": {
-    "causal_mean": {
+    "past_outcome_mean": {
       "dimension": 128,
       "elapsed_seconds": 0.0,
       "evaluation_rounds": 17762,
@@ -58,7 +58,7 @@
     }
   },
   "regression_bike_demand": {
-    "causal_mean": {
+    "past_outcome_mean": {
       "dimension": 128,
       "elapsed_seconds": 0.0,
       "evaluation_rounds": 15642,
@@ -116,7 +116,7 @@
     }
   },
   "regression_interstate_traffic": {
-    "causal_mean": {
+    "past_outcome_mean": {
       "dimension": 128,
       "elapsed_seconds": 0.0,
       "evaluation_rounds": 36518,

@@ -6,7 +6,7 @@ underlying runner directly.
 
 This package compares seven main online binary-prediction procedures on shared datasets and includes the strongly adaptive extension studied in the appendix:
 
-- `defensive`: the Defensive Booster from the paper.
+- `defensive`: the Defensive Booster in `boosting.tex`.
 - `adaptive_defensive`: the strongly adaptive Defensive Booster, enabled with
   `--adaptive-defensive`.
 - `unboosted`: a single online squared-loss regressor over the same weak class.
@@ -14,8 +14,10 @@ This package compares seven main online binary-prediction procedures on shared d
 - `ogb`: online gradient boosting for squared loss, specialized from Beygelzimer, Hazan, Kale, and Luo.
 - `bbm`: Beygelzimer, Kale, and Luo Online BBM, the optimal-rate binary online boosting baseline.
 - `osboost`: Chen, Lin, and Lu online SmoothBoost with the online convex programming combiner and importance-weighted weak-learner updates.
-- `brier_aggregator`: a causal exponential-weights aggregator over OGB,
-  Online BBM, and OSBoost under Brier loss. It runs all three ensembles.
+- `brier_aggregator`: an exponential-weights aggregator over OGB, Online BBM,
+  and OSBoost under Brier loss. It combines their forecasts before observing
+  the current label and updates its weights afterward. It runs all three
+  ensembles.
 
 The output also includes `bbm_vote`, an appendix diagnostic that interprets
 Online BBM's normalized raw vote as a probability. The primary Online BBM
@@ -88,8 +90,8 @@ observations initialize every method, and losses are measured on the remaining
 90%. The loaders add calendar and lagged-target features, standardize numeric
 contexts using only earlier observations, and never redistribute the data.
 The regression runner compares the Defensive Booster with 100-stage OGB over
-the same Euclidean linear weak class; unboosted regression and a causal running
-mean are included as controls.
+the same Euclidean linear weak class; unboosted regression and the mean of
+previously observed outcomes are included as controls.
 
 The real-data loaders require `numpy`, `pandas`, `scipy`, and `requests`.
 They download Bank Marketing, Electricity, Airlines, and Occupancy Detection,
@@ -138,7 +140,7 @@ The algorithms encode labels as `{-1,1}` and represent prediction scores in
 
 All plotted experiments use one global tuning regime rather than per-dataset
 hyperparameter selection.  The Defensive Booster uses the two parameter-free
-scalar adaptive-OGD updates specified in the paper.  Defensive Booster,
+scalar adaptive-OGD updates specified in `boosting.tex`.  Defensive Booster,
 unboosted regression, and OGB share a second-order linear-loss oracle: adaptive
 entropy-FTRL for finite classes and projected adaptive gradient ascent for
 Euclidean linear classes.  OGB, Online BBM, and OSBoost all use 100 weak
@@ -170,7 +172,7 @@ The synthetic datasets are designed to separate the guarantees:
 
 ## Algorithm provenance
 
-- `defensive` implements the Defensive Booster from the paper.
+- `defensive` implements the Defensive Booster from `boosting.tex`.
 - `adaptive_defensive` implements Section 5 using the canonical dyadic interval
   family.  At each scale it runs a fresh copy of the same second-order oracle,
   and it aggregates the active copies using Adapt-ML-Prod (Algorithm 2 of
@@ -182,9 +184,11 @@ The synthetic datasets are designed to separate the guarantees:
 - `ogb` implements Algorithm 1 of Beygelzimer, Hazan, Kale, and Luo, "Online Gradient Boosting", specialized to one-dimensional squared loss with predictions projected to `[-1,1]`.
 - `bbm` implements the Online BBM algorithm of Beygelzimer, Kale, and Luo, "Optimal and Adaptive Algorithms for Online Boosting", using the importance-weighted variant.  BBM outputs hard binary predictions; its reported Brier score is the Brier score of the induced `0/1` probability forecast.
 - `osboost` implements Algorithm 1 of Chen, Lin, and Lu, "An Online Boosting Algorithm with Theoretical Justifications", using the SmoothBoost-style weights and the OCP simplex combiner.  As in their experiments, weak learners receive importance-weighted updates rather than sampled updates.
-- `brier_aggregator` runs OGB, Online BBM, and OSBoost in parallel and causally
-  averages their probability forecasts with exponential weights under Brier
-  loss. With three `N`-learner constituents it maintains `3N` weak learners.
+- `brier_aggregator` runs OGB, Online BBM, and OSBoost in parallel. Before the
+  current label is revealed, it averages their probability forecasts using
+  exponential weights computed from earlier Brier losses; after observing the
+  label, it updates those weights. With three `N`-learner constituents it
+  maintains `3N` weak learners.
 - `bbm_vote` is a diagnostic, not a separate trained algorithm: it scores
   Online BBM's normalized raw ensemble vote as a probability. Online BBM's
   specified hard prediction remains the primary baseline.

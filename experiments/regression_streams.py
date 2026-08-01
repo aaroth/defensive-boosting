@@ -147,7 +147,7 @@ def _encode_contexts(
     categorical_cols: list[str],
     dim: int,
 ) -> np.ndarray:
-    """Hash contexts after causal standardization of numeric coordinates."""
+    """Hash contexts after standardizing from statistics of earlier rows."""
 
     numeric = (
         frame[numeric_cols]

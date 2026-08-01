@@ -99,7 +99,7 @@ def _run_algorithm(
     return row, trace
 
 
-def _causal_mean(
+def _past_outcome_mean(
     stream: RegressionStreamData,
 ) -> tuple[dict[str, float | str | int], dict[str, np.ndarray]]:
     total = float(np.sum(stream.y_init))
@@ -115,7 +115,7 @@ def _causal_mean(
     raw_squared_losses = (stream.raw_y - raw_predictions) ** 2
     row: dict[str, float | str | int] = {
         "stream": stream.name,
-        "algorithm": "causal_mean",
+        "algorithm": "past_outcome_mean",
         "initialization_rounds": stream.initialization_rounds,
         "evaluation_rounds": stream.T,
         "dimension": stream.dim,
@@ -151,9 +151,9 @@ def _write_plot(
 
     display_names = {
         **DISPLAY_NAMES,
-        "causal_mean": "Causal mean",
+        "past_outcome_mean": "Past-outcome mean",
     }
-    colors = {**COLORS, "causal_mean": "#7f7f7f"}
+    colors = {**COLORS, "past_outcome_mean": "#7f7f7f"}
     fig, axes = plt.subplots(1, len(streams), figsize=(12.2, 3.45), sharey=False)
     if len(streams) == 1:
         axes = [axes]
@@ -164,7 +164,12 @@ def _write_plot(
     }
     available = {algorithm for _, algorithm in traces}
     ogb_names = sorted(name for name in available if name.startswith("ogb_N="))
-    algorithm_order = ["defensive", *ogb_names, "unboosted", "causal_mean"]
+    algorithm_order = [
+        "defensive",
+        *ogb_names,
+        "unboosted",
+        "past_outcome_mean",
+    ]
     for ax, stream in zip(axes, streams):
         for algorithm in algorithm_order:
             key = (stream.name, algorithm)
@@ -291,9 +296,9 @@ def main() -> None:
     rows: list[dict[str, float | str | int]] = []
     traces: dict[tuple[str, str], dict[str, np.ndarray]] = {}
     for stream in streams:
-        mean_row, mean_trace = _causal_mean(stream)
+        mean_row, mean_trace = _past_outcome_mean(stream)
         rows.append(mean_row)
-        traces[(stream.name, "causal_mean")] = mean_trace
+        traces[(stream.name, "past_outcome_mean")] = mean_trace
         for algorithm in _algorithm_suite(
             stream,
             args.ogb_learners,

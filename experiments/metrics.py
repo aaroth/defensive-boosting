@@ -79,7 +79,7 @@ def trace_from_probability_scores(
     probabilities: np.ndarray,
     auxiliary: Dict[str, np.ndarray] | None = None,
 ) -> RunTrace:
-    """Build a trace from causal probability forecasts in [0,1]."""
+    """Build a trace from probability forecasts in [0,1]."""
 
     probs = np.asarray(probabilities, dtype=float)
     if probs.shape != (stream.T,):
@@ -114,8 +114,10 @@ def brier_aggregate_traces(
     algorithm: str,
     eta: float = 0.5,
 ) -> RunTrace:
-    """Causally aggregate probability forecasts by exponential Brier weights.
+    """Aggregate sequential probability forecasts by exponential Brier weights.
 
+    Each forecast uses weights computed before the current label is revealed;
+    the weights are updated from component losses after observing that label.
     For eta <= 1/2, the weighted-average forecast has cumulative Brier loss at
     most the best component's loss plus log(K)/eta.
     """
