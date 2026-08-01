@@ -16,6 +16,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Unit tests
-        run: python -m unittest experiments.test_core experiments.test_adaptive
+        run: python -m unittest experiments.test_core experiments.test_adaptive experiments.test_regression
       - name: Synthetic smoke test
         run: python -m experiments.run --quick --no-plots --no-progress --out experiments/out/ci

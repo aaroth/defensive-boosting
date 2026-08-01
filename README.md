@@ -22,7 +22,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install --no-deps -e .
-python -m unittest experiments.test_core experiments.test_adaptive
+python -m unittest experiments.test_core experiments.test_adaptive experiments.test_regression
 python -m experiments.run --quick
 ```
 
@@ -55,6 +55,7 @@ python scripts/reproduce_paper.py sweep
 python scripts/reproduce_paper.py real
 python scripts/reproduce_paper.py adaptive-real
 python scripts/reproduce_paper.py drift
+python scripts/reproduce_paper.py regression
 python scripts/reproduce_paper.py sensitivity
 ```
 
@@ -67,6 +68,7 @@ The targets correspond to the paper as follows:
 | `real` | Four naturally ordered real streams and the introductory summary figure |
 | `adaptive-real` | Strongly adaptive comparison on the four real streams |
 | `drift` | INSECTS controlled-drift results and local hard-core diagnostics |
+| `regression` | Three chronological bounded-regression streams |
 | `sensitivity` | One-at-a-time checks of the OGB step, classifier learning rate, and target-edge parameter |
 
 By default, the script runs the unit tests, compares each `aggregate.json`
@@ -108,7 +110,9 @@ uses only contexts observed before the current round.
 - `experiments/weak_learners.py`: online weak-class oracles.
 - `experiments/streams.py`: controlled synthetic streams.
 - `experiments/real_streams.py`: public dataset downloaders and online preprocessing.
+- `experiments/regression_streams.py`: chronological bounded-regression loaders.
 - `experiments/run.py`: experiment runner and output generation.
+- `experiments/run_regression.py`: regression comparison and plotting.
 - `scripts/reproduce_paper.py`: exact paper-level orchestration.
 - `scripts/check_results.py`: reference-result comparison.
 - `experiments/reference/`: aggregate metrics from the reported runs.

@@ -74,6 +74,23 @@ python3 -m experiments.run --suite drift --seeds 0 \
   --out experiments/out/adaptive_drift
 ```
 
+Run the bounded-regression appendix benchmark:
+
+```bash
+python3 -m experiments.run_regression \
+  --ogb-learners 100 --out experiments/out/regression
+```
+
+This comparison uses Appliances Energy Prediction, hourly Capital Bikeshare
+demand, and Metro Interstate Traffic Volume. Each stream remains in timestamp
+order. Fixed target intervals are declared before the run, the first 10% of
+observations initialize every method, and losses are measured on the remaining
+90%. The loaders add calendar and lagged-target features, standardize numeric
+contexts using only earlier observations, and never redistribute the data.
+The regression runner compares the Defensive Booster with 100-stage OGB over
+the same Euclidean linear weak class; unboosted regression and a causal running
+mean are included as controls.
+
 The real-data loaders require `numpy`, `pandas`, `scipy`, and `requests`.
 They download Bank Marketing, Electricity, Airlines, and Occupancy Detection,
 then evaluate each stream in its released chronological order without

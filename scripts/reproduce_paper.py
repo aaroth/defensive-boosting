@@ -63,6 +63,7 @@ TARGETS = {
         "--out", str(OUT_ROOT / "drift"),
         "--plots",
     ],
+    "regression": [],
     "sensitivity": [],
 }
 
@@ -98,6 +99,9 @@ FIGURE_MAP = {
         "adaptive_insects_brier.png": "adaptive_insects_brier.png",
         "adaptive_insects_abrupt_hard_core_evolution.png": "adaptive_insects_abrupt_hard_core_evolution.png",
     },
+    "regression": {
+        "regression_mse.png": "regression_mse.png",
+    },
     "sensitivity": {
         "sensitivity.png": "hyperparameter_sensitivity.png",
     },
@@ -118,6 +122,16 @@ def run_target(target: str, *, dry_run: bool) -> None:
             "--out",
             str(OUT_ROOT / "sensitivity"),
         ]
+    elif target == "regression":
+        command = [
+            sys.executable,
+            "-m",
+            "experiments.run_regression",
+            "--ogb-learners",
+            "100",
+            "--out",
+            str(OUT_ROOT / "regression"),
+        ]
     else:
         command = [sys.executable, "-m", "experiments.run", *TARGETS[target]]
     run_command(command, dry_run=dry_run)
@@ -133,7 +147,11 @@ def verify_target(target: str) -> None:
 
 
 def sync_figures(target: str) -> None:
-    plot_dir = OUT_ROOT / target if target == "sensitivity" else OUT_ROOT / target / "plots"
+    plot_dir = (
+        OUT_ROOT / target
+        if target == "sensitivity"
+        else OUT_ROOT / target / "plots"
+    )
     figure_dir = ROOT / "figures"
     figure_dir.mkdir(parents=True, exist_ok=True)
     for generated_name, paper_name in FIGURE_MAP[target].items():
@@ -164,7 +182,14 @@ def main() -> None:
     selected = list(TARGETS) if args.target == "all" else [args.target]
     if not args.skip_tests:
         run_command(
-            [sys.executable, "-m", "unittest", "experiments.test_core", "experiments.test_adaptive"],
+            [
+                sys.executable,
+                "-m",
+                "unittest",
+                "experiments.test_core",
+                "experiments.test_adaptive",
+                "experiments.test_regression",
+            ],
             dry_run=args.dry_run,
         )
     for target in selected:

@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 
-IGNORED_METRIC_PREFIXES = ("elapsed_seconds_", "microseconds_per_round_")
+IGNORED_METRIC_PREFIXES = (
+    "elapsed_seconds",
+    "microseconds_per_round",
+)
 
 
 def load_json(path: Path) -> dict[str, Any]:
