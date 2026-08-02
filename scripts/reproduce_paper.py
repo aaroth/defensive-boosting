@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -101,6 +102,7 @@ FIGURE_MAP = {
     },
     "regression": {
         "regression_mse.png": "regression_mse.png",
+        "real_summary_brier.png": "real_summary_brier.png",
     },
     "sensitivity": {
         "sensitivity.png": "hyperparameter_sensitivity.png",
@@ -154,6 +156,22 @@ def sync_figures(target: str) -> None:
     )
     figure_dir = ROOT / "figures"
     figure_dir.mkdir(parents=True, exist_ok=True)
+    if target in {"real", "regression"}:
+        from experiments.plots import plot_real_summary
+
+        def load_aggregate(name: str) -> dict:
+            generated = OUT_ROOT / name / "aggregate.json"
+            source = generated if generated.exists() else REFERENCE_FILES[name]
+            with source.open() as handle:
+                return json.load(handle)
+
+        result = plot_real_summary(
+            load_aggregate("real"),
+            plot_dir,
+            regression_aggregate=load_aggregate("regression"),
+        )
+        if result is None:
+            raise RuntimeError("could not construct the combined real-data summary")
     for generated_name, paper_name in FIGURE_MAP[target].items():
         source = plot_dir / generated_name
         destination = figure_dir / paper_name

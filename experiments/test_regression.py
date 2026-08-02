@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
 import pandas as pd
 
 from .algorithms import DefensiveBooster, OnlineGradientBoosting
+from .plots import plot_real_summary
 from .regression_streams import _build_stream
 from .weak_learners import LinearSecondOrderOracle
 
@@ -66,6 +70,18 @@ class RegressionStreamTest(unittest.TestCase):
                 scores.append(float(result["score"]))
             self.assertTrue(np.all(np.isfinite(scores)))
             self.assertTrue(np.all(np.abs(scores) <= 1.0))
+
+    def test_combined_introductory_figure_renders(self) -> None:
+        reference_dir = Path(__file__).resolve().parent / "reference"
+        with (reference_dir / "real.json").open() as handle:
+            real = json.load(handle)
+        with (reference_dir / "regression.json").open() as handle:
+            regression = json.load(handle)
+        with tempfile.TemporaryDirectory() as directory:
+            path = plot_real_summary(real, Path(directory), regression)
+            self.assertIsNotNone(path)
+            assert path is not None
+            self.assertGreater(path.stat().st_size, 1_000)
 
 
 if __name__ == "__main__":

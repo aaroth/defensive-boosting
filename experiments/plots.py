@@ -264,8 +264,9 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
 def plot_real_summary(
     aggregate: Dict[str, Dict[str, Dict[str, float]]],
     out_dir: Path,
+    regression_aggregate: Dict[str, Dict[str, Dict[str, float]]] | None = None,
 ) -> Path | None:
-    """Plot all real datasets without selecting only favorable ones."""
+    """Plot the real binary results, optionally with the regression comparison."""
 
     stream_order = [
         ("real_bank_marketing", "Bank"),
@@ -291,10 +292,37 @@ def plot_real_summary(
     ):
         return None
 
+    regression_order = [
+        ("regression_appliances_energy", "Appliance energy"),
+        ("regression_bike_demand", "Bike demand"),
+        ("regression_interstate_traffic", "Interstate traffic"),
+    ]
+    regression_algorithms = [
+        ("defensive", "Defensive (1)", "#1f77b4"),
+        ("ogb_N=100", "OGB (100)", "#d62728"),
+    ]
+    show_regression = regression_aggregate is not None
+    if show_regression and not all(
+        algorithm in regression_aggregate[stream]
+        for stream, _ in regression_order
+        for algorithm, _, _ in regression_algorithms
+    ):
+        return None
+
     out_dir.mkdir(parents=True, exist_ok=True)
+    if show_regression:
+        fig, (ax, regression_ax) = plt.subplots(
+            2,
+            1,
+            figsize=(10.2, 7.2),
+            gridspec_kw={"height_ratios": [1.8, 1.0], "hspace": 0.34},
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(10.2, 4.7))
+        regression_ax = None
+
     x = np.arange(len(stream_order), dtype=float)
     width = 0.135
-    fig, ax = plt.subplots(figsize=(10.2, 4.7))
     for index, (algorithm, label, color) in enumerate(algorithm_order):
         ratios = []
         errors = []
@@ -321,11 +349,54 @@ def plot_real_summary(
     ax.axhline(1.0, color="#222222", linewidth=1.0, linestyle="--")
     ax.set_xticks(x)
     ax.set_xticklabels([label for _, label in stream_order])
-    ax.set_ylabel("Brier loss / best method on dataset")
+    ax.set_ylabel("Brier loss / best plotted method")
     ax.set_ylim(bottom=0.0)
     ax.grid(axis="y", alpha=0.25)
     ax.legend(ncol=3, fontsize=8.5, title="Algorithm (weak learners)")
-    fig.tight_layout()
+    if show_regression:
+        ax.set_title("Binary probability forecasts", loc="left", fontweight="medium")
+
+        regression_x = np.arange(len(regression_order), dtype=float)
+        regression_width = 0.28
+        for index, (algorithm, _, color) in enumerate(regression_algorithms):
+            ratios = []
+            for stream, _ in regression_order:
+                by_algo = regression_aggregate[stream]
+                best = min(
+                    by_algo[name]["scaled_mse"]
+                    for name, _, _ in regression_algorithms
+                )
+                ratios.append(by_algo[algorithm]["scaled_mse"] / best)
+            offset = (index - 0.5) * regression_width
+            bars = regression_ax.bar(
+                regression_x + offset,
+                ratios,
+                regression_width,
+                color=color,
+            )
+            if algorithm == "ogb_N=100":
+                for bar, ratio in zip(bars, ratios):
+                    regression_ax.text(
+                        bar.get_x() + bar.get_width() / 2.0,
+                        ratio + 0.025,
+                        f"{ratio:.2f}x",
+                        ha="center",
+                        va="bottom",
+                        color="#a32121",
+                        fontsize=9,
+                        fontweight="medium",
+                    )
+        regression_ax.axhline(1.0, color="#222222", linewidth=1.0, linestyle="--")
+        regression_ax.set_xticks(regression_x)
+        regression_ax.set_xticklabels([label for _, label in regression_order])
+        regression_ax.set_ylabel("MSE / best plotted method")
+        regression_ax.set_ylim(0.0, 1.55)
+        regression_ax.set_yticks([0.0, 0.5, 1.0, 1.5])
+        regression_ax.set_title("Bounded regression", loc="left", fontweight="medium")
+        regression_ax.grid(axis="y", alpha=0.25)
+        fig.subplots_adjust(left=0.105, right=0.985, top=0.975, bottom=0.075)
+    else:
+        fig.tight_layout()
     path = out_dir / "real_summary_brier.png"
     fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white", transparent=False)
     plt.close(fig)

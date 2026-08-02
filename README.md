@@ -65,10 +65,10 @@ The targets correspond to the paper as follows:
 | --- | --- |
 | `synthetic` | Main complementary-regime and hard-core diagnostics; complete synthetic appendix |
 | `sweep` | Ensemble-size comparison on the group-subset stream |
-| `real` | Four naturally ordered real streams and the introductory summary figure |
+| `real` | Four naturally ordered binary streams and the classification row of the introductory summary figure |
 | `adaptive-real` | Strongly adaptive comparison on the four real streams |
 | `drift` | INSECTS controlled-drift results and local hard-core diagnostics |
-| `regression` | Three chronological bounded-regression streams |
+| `regression` | Three chronological bounded-regression streams and the regression row of the introductory summary figure |
 | `sensitivity` | One-at-a-time checks of the OGB step, classifier learning rate, and target-edge parameter |
 
 By default, the script runs the unit tests, compares each `aggregate.json`
@@ -76,6 +76,9 @@ with the corresponding file in `experiments/reference/`, and copies the
 regenerated paper plots into `figures/`.  Use `--no-verify`
 to skip the numerical check, `--no-sync` to leave the checked-in figures
 unchanged, or `--dry-run` to print the exact commands without running them.
+Running either `real` or `regression` rebuilds the complete two-row
+introductory figure, using the newly generated aggregate for that target and
+the tracked reference aggregate for the other row.
 
 For a direct invocation of the underlying runner, use:
 
