@@ -34,6 +34,8 @@ def _algorithm_color(name: str) -> str:
         return "#d62728"
     if name.startswith("bbm"):
         return "#9467bd"
+    if name.startswith("adaboost_ol"):
+        return "#e6ab02"
     if name.startswith("osboost"):
         return "#8c564b"
     return "#7f7f7f"
@@ -56,6 +58,8 @@ def _pretty_algorithm(name: str) -> str:
         return "OGB"
     if name.startswith("bbm"):
         return "Online BBM"
+    if name.startswith("adaboost_ol"):
+        return "AdaBoost.OL"
     if name.startswith("osboost"):
         return "OSBoost"
     return name
@@ -110,13 +114,15 @@ def _algorithm_sort_key(name: str) -> Tuple[int, int, str]:
         return (4, n, name)
     if name.startswith("bbm"):
         return (5, n, name)
-    if name.startswith("osboost"):
+    if name.startswith("adaboost_ol"):
         return (6, n, name)
-    if name.startswith("brier_aggregator"):
+    if name.startswith("osboost"):
         return (7, n, name)
-    if name.startswith("bbm_vote"):
+    if name.startswith("brier_aggregator"):
         return (8, n, name)
-    return (9, n, name)
+    if name.startswith("bbm_vote"):
+        return (9, n, name)
+    return (10, n, name)
 
 
 def plot_traces(traces: Iterable[RunTrace], out_dir: Path) -> List[Path]:
@@ -206,9 +212,10 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
     for stream_name, by_algo in aggregate.items():
         ogb = _sweep_points(by_algo, "ogb")
         bbm = _sweep_points(by_algo, "bbm")
+        adaboost = _sweep_points(by_algo, "adaboost_ol")
         osboost = _sweep_points(by_algo, "osboost")
         aggregator = _sweep_points(by_algo, "brier_aggregator")
-        if not ogb and not bbm and not osboost and not aggregator:
+        if not ogb and not bbm and not adaboost and not osboost and not aggregator:
             continue
         fig, axes = plt.subplots(1, 2, figsize=(10.4, 4.2), sharex=True)
         for ax, metric, ylabel in [
@@ -218,11 +225,12 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
             for label, points, color in [
                 ("OGB", ogb, "#d62728"),
                 ("Online BBM", bbm, "#9467bd"),
+                ("AdaBoost.OL", adaboost, "#e6ab02"),
                 ("OSBoost", osboost, "#8c564b"),
                 ("Brier aggregator", aggregator, "#222222"),
             ]:
                 if points:
-                    multiplier = 3.0 if label == "Brier aggregator" else 1.0
+                    multiplier = 4.0 if label == "Brier aggregator" else 1.0
                     ns = multiplier * np.array([p[0] for p in points], dtype=float)
                     means = np.array([p[1][f"{metric}_mean"] for p in points], dtype=float)
                     ses = np.array([p[1][f"{metric}_stderr"] for p in points], dtype=float)
@@ -238,7 +246,7 @@ def plot_compute_sweeps(aggregate: Dict[str, Dict[str, Dict[str, float]]], out_d
                     vals = by_algo[baseline]
                     ax.axhline(vals[f"{metric}_mean"], color=color, linestyle=linestyle, linewidth=1.6, label=_pretty_algorithm(baseline))
             ax.set_xscale("log")
-            ax.set_xticks([1, 5, 20, 100, 300])
+            ax.set_xticks([1, 5, 20, 100, 400])
             ax.get_xaxis().set_major_formatter(ScalarFormatter())
             ax.set_xlabel("total maintained weak learners")
             ax.set_ylabel(ylabel)
@@ -283,8 +291,14 @@ def plot_real_summary(
         ("ogb_N=100", "OGB (100)", "#d62728"),
         ("bbm_N=100", "Online BBM (100)", "#9467bd"),
         ("osboost_N=100", "OSBoost (100)", "#8c564b"),
-        ("brier_aggregator_N=100", "Brier aggregator (300)", "#222222"),
     ]
+    has_adaboost = all("adaboost_ol_N=100" in aggregate[stream] for stream, _ in stream_order)
+    if has_adaboost:
+        algorithm_order.insert(4, ("adaboost_ol_N=100", "AdaBoost.OL (100)", "#e6ab02"))
+    aggregator_size = 400 if has_adaboost else 300
+    algorithm_order.append(
+        ("brier_aggregator_N=100", f"Brier aggregator ({aggregator_size})", "#222222")
+    )
     if not all(
         algorithm in aggregate[stream]
         for stream, _ in stream_order
@@ -322,7 +336,7 @@ def plot_real_summary(
         regression_ax = None
 
     x = np.arange(len(stream_order), dtype=float)
-    width = 0.135
+    width = 0.115 if has_adaboost else 0.135
     for index, (algorithm, label, color) in enumerate(algorithm_order):
         ratios = []
         errors = []

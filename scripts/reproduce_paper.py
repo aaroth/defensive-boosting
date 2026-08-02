@@ -10,10 +10,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from check_results import compare_results
-
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from check_results import compare_results
 OUT_ROOT = ROOT / "experiments" / "out" / "paper"
 REFERENCE_ROOT = ROOT / "experiments" / "reference"
 SEEDS = [str(seed) for seed in range(20)]
@@ -106,6 +107,7 @@ FIGURE_MAP = {
     },
     "sensitivity": {
         "sensitivity.png": "hyperparameter_sensitivity.png",
+        "real_sensitivity.png": "real_hyperparameter_sensitivity.png",
     },
 }
 

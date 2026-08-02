@@ -81,17 +81,20 @@ def real_streams(
     max_rows: int | None = None,
     dim: int = 128,
     progress: bool = False,
+    name_filters: tuple[str, ...] | None = None,
 ) -> list[StreamData]:
     """Return the four real datasets used in the experiments."""
 
     specs = [
-        ("Bank Marketing", bank_marketing, max_rows),
-        ("MOA Electricity", moa_electricity, max_rows),
-        ("MOA Airlines", moa_airlines, max_rows),
-        ("UCI Occupancy Detection", occupancy_detection, max_rows),
+        ("real_bank_marketing", "Bank Marketing", bank_marketing, max_rows),
+        ("real_moa_electricity", "MOA Electricity", moa_electricity, max_rows),
+        ("real_moa_airlines", "MOA Airlines", moa_airlines, max_rows),
+        ("real_uci_occupancy", "UCI Occupancy Detection", occupancy_detection, max_rows),
     ]
     streams = []
-    for label, loader, rows in specs:
+    for canonical_name, label, loader, rows in specs:
+        if name_filters and not any(value in canonical_name for value in name_filters):
+            continue
         if progress:
             print(f"Loading {label}...", flush=True)
         start = time.perf_counter()

@@ -4,7 +4,7 @@ For environment setup and the one-command paper reproduction workflow, see
 the [repository README](../README.md).  The commands below expose the
 underlying runner directly.
 
-This package compares seven main online binary-prediction procedures on shared datasets and includes the strongly adaptive extension studied in the appendix:
+This package compares eight main online binary-prediction procedures on shared datasets and includes the strongly adaptive extension studied in the appendix:
 
 - `defensive`: the Defensive Booster in `boosting.tex`.
 - `adaptive_defensive`: the strongly adaptive Defensive Booster, enabled with
@@ -13,10 +13,12 @@ This package compares seven main online binary-prediction procedures on shared d
 - `unboosted_cls`: a single binary classification learner of the kind used by the classification boosters.
 - `ogb`: online gradient boosting for squared loss, specialized from Beygelzimer, Hazan, Kale, and Luo.
 - `bbm`: Beygelzimer, Kale, and Luo Online BBM, the optimal-rate binary online boosting baseline.
+- `adaboost_ol`: the importance-weighted AdaBoost.OL.W algorithm of
+  Beygelzimer, Kale, and Luo.
 - `osboost`: Chen, Lin, and Lu online SmoothBoost with the online convex programming combiner and importance-weighted weak-learner updates.
 - `brier_aggregator`: an exponential-weights aggregator over OGB, Online BBM,
-  and OSBoost under Brier loss. It combines their forecasts before observing
-  the current label and updates its weights afterward. It runs all three
+  AdaBoost.OL, and OSBoost under Brier loss. It combines their forecasts before observing
+  the current label and updates its weights afterward. It runs all four
   ensembles.
 
 The output also includes `bbm_vote`, an appendix diagnostic that interprets
@@ -143,14 +145,14 @@ hyperparameter selection.  The Defensive Booster uses the two parameter-free
 scalar adaptive-OGD updates specified in `boosting.tex`.  Defensive Booster,
 unboosted regression, and OGB share a second-order linear-loss oracle: adaptive
 entropy-FTRL for finite classes and projected adaptive gradient ascent for
-Euclidean linear classes.  OGB, Online BBM, and OSBoost all use 100 weak
+Euclidean linear classes.  OGB, Online BBM, AdaBoost.OL, and OSBoost all use 100 weak
 learners in the main runs, or the requested values in a learner-count sweep;
 OGB uses the theory-suggested stage step `(log N)/N` for `N > 1` and step `1`
 for `N = 1`.  Online BBM and OSBoost both use target classification advantage
 `gamma=0.1`, where each paper defines gamma as the improvement over error
 `1/2`.  This is stored separately from the real-valued correlation edge used
 by the paper's theorem.  The finite classification learners used by unboosted
-classification, Online BBM, and OSBoost share the horizon-aware Hedge rate
+classification, Online BBM, AdaBoost.OL, and OSBoost share the horizon-aware Hedge rate
 `min(0.5, sqrt(8 log(n_experts) / T))`; their linear counterparts share the
 same weighted projected-perceptron update.  No hyperparameter is selected
 separately for an individual dataset.
@@ -180,15 +182,20 @@ The synthetic datasets are designed to separate the guarantees:
   reduction.  Linear and finite-class states are vectorized across scales;
   this changes runtime but not the per-scale updates.
 - `unboosted` runs one online squared-loss learner over the same weak class.
-- `unboosted_cls` runs one copy of the same online binary classifier used as a weak learner by Online BBM and OSBoost.
+- `unboosted_cls` runs one copy of the same online binary classifier used as a weak learner by Online BBM, AdaBoost.OL, and OSBoost.
 - `ogb` implements Algorithm 1 of Beygelzimer, Hazan, Kale, and Luo, "Online Gradient Boosting", specialized to one-dimensional squared loss with predictions projected to `[-1,1]`.
 - `bbm` implements the Online BBM algorithm of Beygelzimer, Kale, and Luo, "Optimal and Adaptive Algorithms for Online Boosting", using the importance-weighted variant.  BBM outputs hard binary predictions; its reported Brier score is the Brier score of the induced `0/1` probability forecast.
+- `adaboost_ol` implements the importance-weighted AdaBoost.OL.W variant from
+  the same paper. Projected OGD learns the logistic coefficient of each weak
+  learner, and exponential weights aggregate the partial ensembles. The
+  reported probability is the algorithm's probability of predicting `1`;
+  randomized error is the expected error of its randomized classifier.
 - `osboost` implements Algorithm 1 of Chen, Lin, and Lu, "An Online Boosting Algorithm with Theoretical Justifications", using the SmoothBoost-style weights and the OCP simplex combiner.  As in their experiments, weak learners receive importance-weighted updates rather than sampled updates.
-- `brier_aggregator` runs OGB, Online BBM, and OSBoost in parallel. Before the
+- `brier_aggregator` runs OGB, Online BBM, AdaBoost.OL, and OSBoost in parallel. Before the
   current label is revealed, it averages their probability forecasts using
   exponential weights computed from earlier Brier losses; after observing the
-  label, it updates those weights. With three `N`-learner constituents it
-  maintains `3N` weak learners.
+  label, it updates those weights. With four `N`-learner constituents it
+  maintains `4N` weak learners.
 - `bbm_vote` is a diagnostic, not a separate trained algorithm: it scores
   Online BBM's normalized raw ensemble vote as a probability. Online BBM's
   specified hard prediction remains the primary baseline.

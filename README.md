@@ -69,7 +69,7 @@ The targets correspond to the paper as follows:
 | `adaptive-real` | Strongly adaptive comparison on the four real streams |
 | `drift` | INSECTS controlled-drift results and local hard-core diagnostics |
 | `regression` | Three chronological bounded-regression streams and the regression row of the introductory summary figure |
-| `sensitivity` | One-at-a-time checks of the OGB step, classifier learning rate, and target-edge parameter |
+| `sensitivity` | One-at-a-time checks over 16-fold parameter ranges on the group-subset, Electricity, and Occupancy streams |
 
 By default, the script runs the unit tests, compares each `aggregate.json`
 with the corresponding file in `experiments/reference/`, and copies the

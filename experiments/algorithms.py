@@ -259,6 +259,80 @@ class OnlineBBM(OnlineAlgorithm):
 
 
 @dataclass
+class AdaBoostOL(OnlineAlgorithm):
+    """Importance-weighted AdaBoost.OL.W of Beygelzimer, Kale, and Luo.
+
+    Each partial ensemble is an expert.  Hedge combines their hard
+    predictions, while projected OGD learns the logistic-loss coefficient of
+    each weak learner.  We return Hedge's probability of predicting +1 as a
+    signed probability score.  Thus randomized error is the expected 0/1
+    loss of AdaBoost.OL's randomized classifier, and Brier loss scores that
+    same randomization probability as a probability forecast.
+    """
+
+    classifier_factory: ClassifierFactory
+    n_learners: int = 40
+    name: str = "adaboost_ol"
+
+    def __post_init__(self) -> None:
+        if self.n_learners < 1:
+            raise ValueError("AdaBoost.OL requires at least one weak learner")
+        self.learners = [self.classifier_factory() for _ in range(self.n_learners)]
+        self.alpha = np.zeros(self.n_learners, dtype=float)
+        self.log_expert_weights = np.zeros(self.n_learners, dtype=float)
+        self.t = 0
+
+    @staticmethod
+    def _logistic_weight(margin: float) -> float:
+        """Return 1 / (1 + exp(margin)) without overflow."""
+
+        if margin >= 0.0:
+            exp_neg = math.exp(-margin)
+            return exp_neg / (1.0 + exp_neg)
+        exp_pos = math.exp(margin)
+        return 1.0 / (1.0 + exp_pos)
+
+    def step(self, x: np.ndarray, y: int) -> RoundResult:
+        self.t += 1
+        h = np.array([learner.predict(x) for learner in self.learners], dtype=float)
+        prefix_scores = np.cumsum(self.alpha * h)
+        expert_predictions = np.where(prefix_scores >= 0.0, 1.0, -1.0)
+
+        shifted = self.log_expert_weights - np.max(self.log_expert_weights)
+        expert_weights = np.exp(shifted)
+        expert_weights /= np.sum(expert_weights)
+        score = float(expert_weights @ expert_predictions)
+
+        signed_prefix_margin = 0.0
+        total_importance = 0.0
+        eta_t = 4.0 / math.sqrt(self.t)
+        for i, learner in enumerate(self.learners):
+            importance = self._logistic_weight(signed_prefix_margin)
+            learner.update_weighted(x, y, importance)
+            total_importance += importance
+
+            z_i = float(y) * h[i]
+            signed_prefix_margin += self.alpha[i] * z_i
+            gradient_weight = self._logistic_weight(signed_prefix_margin)
+            self.alpha[i] = float(
+                np.clip(self.alpha[i] + eta_t * z_i * gradient_weight, -2.0, 2.0)
+            )
+
+        self.log_expert_weights -= (expert_predictions != float(y)).astype(float)
+        self.log_expert_weights -= np.max(self.log_expert_weights)
+
+        return _round_result(
+            self.name,
+            score,
+            y,
+            extra={
+                "mean_importance_weight": total_importance / self.n_learners,
+                "mean_abs_alpha": float(np.mean(np.abs(self.alpha))),
+            },
+        )
+
+
+@dataclass
 class OnlineSmoothBoost(OnlineAlgorithm):
     """Chen-Lin-Lu online SmoothBoost baseline with OCP combiner.
 

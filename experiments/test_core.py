@@ -8,7 +8,13 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from .algorithms import DefensiveBooster, OnlineBBM, OnlineGradientBoosting, OnlineSmoothBoost
+from .algorithms import (
+    AdaBoostOL,
+    DefensiveBooster,
+    OnlineBBM,
+    OnlineGradientBoosting,
+    OnlineSmoothBoost,
+)
 from .metrics import (
     brier_aggregate_traces,
     hard_core_edge,
@@ -55,6 +61,7 @@ class BaselineConventionTest(unittest.TestCase):
             stream,
             ogb_learners=2,
             bbm_learners=2,
+            adaboost_learners=2,
             osb_learners=2,
             osb_gamma=0.1,
             bbm_gamma=0.1,
@@ -64,6 +71,25 @@ class BaselineConventionTest(unittest.TestCase):
         osboost = next(algo for algo in algorithms if isinstance(algo, OnlineSmoothBoost))
         self.assertAlmostEqual(bbm.gamma, stream.classification_advantage_hint)
         self.assertAlmostEqual(osboost.gamma, stream.classification_advantage_hint)
+
+    def test_adaboost_ol_probability_and_updates(self) -> None:
+        stream = group_subset_heterogeneous_margin(T=40, low_margin=0.5, seed=2)
+        algorithms = build_algorithms(
+            stream,
+            ogb_learners=2,
+            bbm_learners=2,
+            adaboost_learners=3,
+            osb_learners=2,
+            osb_gamma=0.1,
+            bbm_gamma=0.1,
+            gain_oracle="second_order",
+        )
+        adaboost = next(algo for algo in algorithms if isinstance(algo, AdaBoostOL))
+        first = adaboost.step(stream.X[0], int(stream.y[0]))
+        self.assertGreaterEqual(float(first["score"]), -1.0)
+        self.assertLessEqual(float(first["score"]), 1.0)
+        self.assertTrue(np.all(np.abs(adaboost.alpha) <= 2.0))
+        self.assertTrue(np.any(np.abs(adaboost.alpha) > 0.0))
 
     def test_real_valued_and_classification_edges_are_distinct(self) -> None:
         stream = group_subset_heterogeneous_margin(T=80, low_margin=0.6, seed=0)

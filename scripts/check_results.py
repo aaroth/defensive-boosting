@@ -32,39 +32,38 @@ def compare_results(
     reference = load_json(reference_path)
     failures: list[str] = []
 
-    if set(actual) != set(reference):
-        failures.append(
-            f"stream keys differ: actual={sorted(actual)}, reference={sorted(reference)}"
-        )
-        return failures
+    def compare_node(observed: Any, expected: Any, path: tuple[str, ...]) -> None:
+        location = "/".join(path) or "<root>"
+        if isinstance(expected, dict):
+            if not isinstance(observed, dict):
+                failures.append(f"{location}: expected a mapping, observed {type(observed).__name__}")
+                return
+            observed_keys = set(observed)
+            expected_keys = set(expected)
+            if observed_keys != expected_keys:
+                missing = sorted(expected_keys - observed_keys)
+                extra = sorted(observed_keys - expected_keys)
+                failures.append(f"{location}: key mismatch; missing={missing}, extra={extra}")
+                return
+            for key in sorted(expected):
+                if key.startswith(IGNORED_METRIC_PREFIXES):
+                    continue
+                compare_node(observed[key], expected[key], (*path, key))
+            return
 
-    for stream in sorted(reference):
-        if set(actual[stream]) != set(reference[stream]):
-            failures.append(
-                f"{stream}: algorithm keys differ: actual={sorted(actual[stream])}, "
-                f"reference={sorted(reference[stream])}"
+        try:
+            close = math.isclose(
+                float(observed),
+                float(expected),
+                rel_tol=relative_tolerance,
+                abs_tol=absolute_tolerance,
             )
-            continue
-        for algorithm in sorted(reference[stream]):
-            actual_metrics = actual[stream][algorithm]
-            reference_metrics = reference[stream][algorithm]
-            for metric, expected in sorted(reference_metrics.items()):
-                if metric.startswith(IGNORED_METRIC_PREFIXES):
-                    continue
-                if metric not in actual_metrics:
-                    failures.append(f"{stream}/{algorithm}: missing metric {metric}")
-                    continue
-                observed = actual_metrics[metric]
-                if not math.isclose(
-                    float(observed),
-                    float(expected),
-                    rel_tol=relative_tolerance,
-                    abs_tol=absolute_tolerance,
-                ):
-                    failures.append(
-                        f"{stream}/{algorithm}/{metric}: observed {observed}, "
-                        f"expected {expected}"
-                    )
+        except (TypeError, ValueError):
+            close = observed == expected
+        if not close:
+            failures.append(f"{location}: observed {observed}, expected {expected}")
+
+    compare_node(actual, reference, ())
     return failures
 
 
