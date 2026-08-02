@@ -72,6 +72,8 @@ def _pretty_stream(name: str) -> str:
         return "Random-label mixture"
     if name.startswith("group_subset_positive") or name.startswith("group_subset_heterogeneous"):
         return "Group-subset stream"
+    if name.startswith("binary_aggregation"):
+        return "Binary aggregation stream"
     if name.startswith("linear_span_fallback"):
         return "Linear-span stream"
     if name.startswith("random_labels"):
@@ -425,7 +427,7 @@ def plot_bbm_vote_diagnostic(
 
     streams = [
         ("planted_decoy_margin_d=200_gamma=0.12", "Planted decoy"),
-        ("group_subset_heterogeneous_m=10_k=6_delta=0.6", "Group subset"),
+        ("binary_aggregation_k=100_r=58", "Binary aggregation"),
     ]
     algorithms = [
         ("bbm_N=100", "Hard output", "#9467bd"),

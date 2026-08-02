@@ -170,6 +170,80 @@ def group_subset_heterogeneous_margin(
     )
 
 
+def binary_aggregation(
+    T: int,
+    n_pairs: int = 100,
+    correct_orientations: int = 58,
+    seed: int = 0,
+) -> StreamData:
+    """Binary weak class requiring aggregation under every reweighting.
+
+    The displayed class contains `n_pairs` opposite pairs.  One latent
+    orientation from each pair is favorable: all favorable orientations are
+    correct on half the rounds, while cyclically shifted patterns make exactly
+    `correct_orientations` of them correct on each remaining round.  Their hidden
+    pointwise average gives every reweighting correlation edge at least
+    2 * correct_orientations / n_pairs - 1.  Random sign flips and a column
+    permutation conceal the favorable orientations from the learner.
+    """
+
+    if not (0 < correct_orientations < n_pairs):
+        raise ValueError(
+            "correct_orientations must lie strictly between 0 and n_pairs"
+        )
+    if 2 * correct_orientations <= n_pairs:
+        raise ValueError("a strict majority of the orientations must be correct")
+    if T % (2 * n_pairs) != 0:
+        raise ValueError("T must be divisible by 2 * n_pairs for exact balance")
+
+    rng = np.random.default_rng(seed)
+    labels = np.where(np.arange(T) % 2 == 0, -1, 1).astype(int)
+    base_pattern = np.concatenate(
+        [
+            np.ones(correct_orientations, dtype=float),
+            -np.ones(n_pairs - correct_orientations, dtype=float),
+        ]
+    )
+    cyclic_patterns = np.stack(
+        [np.roll(base_pattern, shift) for shift in range(n_pairs)]
+    )
+    repeats = T // (2 * n_pairs)
+    signed_weak_values = np.vstack(
+        [
+            np.ones((T // 2, n_pairs), dtype=float),
+            np.tile(cyclic_patterns, (repeats, 1)),
+        ]
+    )
+    base_values = signed_weak_values * labels[:, None]
+    orientations = rng.choice(np.array([-1.0, 1.0]), size=n_pairs)
+    oriented_values = base_values * orientations[None, :]
+    X = np.concatenate([oriented_values, -oriented_values], axis=1)
+    X = X[:, rng.permutation(X.shape[1])]
+    order = rng.permutation(T)
+    X = X[order]
+    labels = labels[order]
+
+    edge = 2.0 * correct_orientations / n_pairs - 1.0
+    return StreamData(
+        name=(
+            f"binary_aggregation_k={n_pairs}"
+            f"_r={correct_orientations}"
+        ),
+        X=X,
+        y=labels,
+        weak_type="finite",
+        correlation_edge_hint=edge,
+        classification_advantage_hint=edge / 2.0,
+        description=(
+            "A symmetric class of binary weak hypotheses contains a hidden "
+            "uniform aggregate with pointwise signed margin "
+            f"{edge:g}, so every reweighting has that much weak-class edge. "
+            "No individual weak hypothesis is perfect, and averaging all "
+            "presented hypotheses cancels to zero."
+        ),
+    )
+
+
 def planted_decoy_margin(
     T: int,
     d: int = 200,
@@ -331,11 +405,10 @@ def random_labels(T: int, d: int = 30, seed: int = 0) -> StreamData:
 def default_streams(T: int, seed: int) -> List[StreamData]:
     return [
         planted_decoy_margin(T=T, d=200, gamma=0.12, seed=seed),
-        group_subset_heterogeneous_margin(
+        binary_aggregation(
             T=T,
-            n_groups=10,
-            subset_size=6,
-            low_margin=0.6,
+            n_pairs=100,
+            correct_orientations=58,
             seed=seed,
         ),
         linear_span_fallback(T=T, d=40, margin_noise=0.02, seed=seed),
@@ -346,6 +419,7 @@ def default_streams(T: int, seed: int) -> List[StreamData]:
 
 STREAM_BUILDERS: Dict[str, Callable[..., StreamData]] = {
     "heterogeneous_margin": heterogeneous_margin,
+    "binary_aggregation": binary_aggregation,
     "group_subset_positive": group_subset_positive,
     "group_subset_heterogeneous_margin": group_subset_heterogeneous_margin,
     "planted_decoy_margin": planted_decoy_margin,

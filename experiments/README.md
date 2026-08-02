@@ -43,7 +43,7 @@ Run an ensemble-size sweep:
 ```bash
 python3 -m experiments.run --T 3000 \
   --seeds 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 \
-  --stream-filter group_subset \
+  --stream-filter binary_aggregation \
   --learner-sweep 1 5 20 100 --out experiments/out/sweep
 ```
 
@@ -140,32 +140,33 @@ The algorithms encode labels as `{-1,1}` and represent prediction scores in
 `[-1,1]`.  Reported loss is Brier loss for the associated probabilities
 `p=(score+1)/2`, i.e. one quarter of signed squared loss.
 
-All plotted experiments use one global tuning regime rather than per-dataset
-hyperparameter selection.  The Defensive Booster uses the two parameter-free
+No plotted experiment chooses parameters by optimizing observed performance
+on an individual dataset. Each algorithm family uses a predeclared rule. The Defensive Booster uses the two parameter-free
 scalar adaptive-OGD updates specified in `boosting.tex`.  Defensive Booster,
 unboosted regression, and OGB share a second-order linear-loss oracle: adaptive
 entropy-FTRL for finite classes and projected adaptive gradient ascent for
 Euclidean linear classes.  OGB, Online BBM, AdaBoost.OL, and OSBoost all use 100 weak
 learners in the main runs, or the requested values in a learner-count sweep;
 OGB uses the theory-suggested stage step `(log N)/N` for `N > 1` and step `1`
-for `N = 1`.  Online BBM and OSBoost both use target classification advantage
-`gamma=0.1`, where each paper defines gamma as the improvement over error
-`1/2`.  This is stored separately from the real-valued correlation edge used
-by the paper's theorem.  The finite classification learners used by unboosted
+for `N = 1`. Online BBM and OSBoost use a known guaranteed classification
+advantage on a synthetic stream when one is available: `gamma=0.08` on binary
+aggregation and `gamma=0.1` otherwise. Each paper defines gamma as the
+improvement over error `1/2`; the corresponding signed correlation is
+`2*gamma`. The finite classification learners used by unboosted
 classification, Online BBM, AdaBoost.OL, and OSBoost share the horizon-aware Hedge rate
 `min(0.5, sqrt(8 log(n_experts) / T))`; their linear counterparts share the
-same weighted projected-perceptron update.  No hyperparameter is selected
-separately for an individual dataset.
+same weighted projected-perceptron update.
 
 The synthetic datasets are designed to separate the guarantees:
 
-- `group_subset_heterogeneous`: a latent generator uses a group, a sign equal
-  to the signed label, and a magnitude in `{0.6, 1}`. Algorithms receive only
-  the resulting vector of 210 weak-rule values, not those latent variables as
-  separate features. The real-valued class has edge at least `0.12` under every
-  reweighting, but the changing magnitude prevents any one affine span score
-  from fitting all rounds exactly. The useful subset rule also changes with
-  the reweighting.
+- `binary_aggregation`: the displayed class contains 100 opposite pairs of
+  binary weak rules. One hidden orientation from each pair is useful. Half the
+  rounds make all 100 useful orientations correct; the rest cycle through
+  balanced patterns in which 58 are correct. Random sign flips and a column
+  permutation hide the useful orientations. Every reweighting has weak-class
+  edge at least `0.16`, no individual rule is perfect, and averaging all 200
+  displayed rules gives zero. Cyclic symmetry gives an exact `0.0860`
+  Brier-loss floor for every fixed affine span score.
 - `planted_decoy_margin`: a large finite class contains one sign-perfect heterogeneous-margin weak rule among many decoys, giving a weak-to-strong favorable regime for OSBoost.
 - `heterogeneous_margin`: a one-rule sanity check where smooth weak learning holds, but the one-dimensional span still has constant squared loss.
 - `linear_span_fallback`: the weak class is the infinite Euclidean linear ball; the smooth weak-learning condition fails on near-margin subsets, but a scaled linear span predictor is accurate.

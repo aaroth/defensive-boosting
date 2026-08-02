@@ -42,7 +42,7 @@ def run_configuration(
         "--seeds",
         *[str(seed) for seed in seeds],
         "--stream-filter",
-        "group_subset_heterogeneous",
+        "binary_aggregation",
         "--algorithm-filter",
         *algorithms,
         "--no-brier-aggregator",
@@ -57,7 +57,7 @@ def run_configuration(
     print("+", " ".join(command), flush=True)
     subprocess.run(command, cwd=ROOT, check=True)
     with (out_dir / "aggregate.json").open() as handle:
-        return json.load(handle)["group_subset_heterogeneous_m=10_k=6_delta=0.6"]
+        return json.load(handle)["binary_aggregation_k=100_r=58"]
 
 
 def run_real_configuration(
@@ -95,10 +95,64 @@ def run_real_configuration(
         return json.load(handle)
 
 
+def real_sensitivity_results(
+    out_dir: Path,
+    multipliers: list[float],
+    *,
+    reuse_reference: bool,
+) -> dict[str, dict[str, dict]]:
+    if reuse_reference:
+        reference = ROOT / "experiments" / "reference" / "sensitivity.json"
+        with reference.open() as handle:
+            return json.load(handle)["real_sensitivity"]
+
+    defensive_raw = run_real_configuration(
+        out_dir / "real_defensive",
+        algorithms=["defensive"],
+    )
+    results: dict[str, dict[str, dict]] = {
+        stream: {"defensive": values["defensive"]}
+        for stream, values in defensive_raw.items()
+    }
+    for multiplier in multipliers:
+        key = f"{multiplier:g}"
+        ogb_raw = run_real_configuration(
+            out_dir / f"real_ogb_step_{key}",
+            algorithms=["ogb_N=100"],
+            option="--ogb-step-multiplier",
+            value=multiplier,
+        )
+        eta_raw = run_real_configuration(
+            out_dir / f"real_classifier_eta_{key}",
+            algorithms=["bbm_N=100", "adaboost_ol_N=100", "osboost_N=100"],
+            option="--classifier-eta-multiplier",
+            value=multiplier,
+        )
+        edge_raw = run_real_configuration(
+            out_dir / f"real_edge_{key}",
+            algorithms=["bbm_N=100", "osboost_N=100"],
+            option="--edge-multiplier",
+            value=multiplier,
+        )
+        for stream in results:
+            results[stream][f"ogb_step_{key}"] = ogb_raw[stream]["ogb_N=100"]
+            results[stream][f"bbm_eta_{key}"] = eta_raw[stream]["bbm_N=100"]
+            results[stream][f"adaboost_ol_eta_{key}"] = eta_raw[stream]["adaboost_ol_N=100"]
+            results[stream][f"osboost_eta_{key}"] = eta_raw[stream]["osboost_N=100"]
+            results[stream][f"bbm_edge_{key}"] = edge_raw[stream]["bbm_N=100"]
+            results[stream][f"osboost_edge_{key}"] = edge_raw[stream]["osboost_N=100"]
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=ROOT / "experiments" / "out" / "paper" / "sensitivity")
     parser.add_argument("--seeds", type=int, nargs="+", default=list(range(10)))
+    parser.add_argument(
+        "--reuse-real-reference",
+        action="store_true",
+        help="reuse the checked-in real-stream sweep while rerunning the synthetic sweep",
+    )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -139,46 +193,16 @@ def main() -> None:
         results[f"bbm_edge_{key}"] = edge_result["bbm_N=100"]
         results[f"osboost_edge_{key}"] = edge_result["osboost_N=100"]
 
-    real_defensive_raw = run_real_configuration(
-        args.out / "real_defensive",
-        algorithms=["defensive"],
+    real_results = real_sensitivity_results(
+        args.out,
+        multipliers,
+        reuse_reference=args.reuse_real_reference,
     )
-    real_results: dict[str, dict[str, dict]] = {
-        stream: {"defensive": values["defensive"]}
-        for stream, values in real_defensive_raw.items()
-    }
-    for multiplier in multipliers:
-        key = f"{multiplier:g}"
-        ogb_raw = run_real_configuration(
-            args.out / f"real_ogb_step_{key}",
-            algorithms=["ogb_N=100"],
-            option="--ogb-step-multiplier",
-            value=multiplier,
-        )
-        eta_raw = run_real_configuration(
-            args.out / f"real_classifier_eta_{key}",
-            algorithms=["bbm_N=100", "adaboost_ol_N=100", "osboost_N=100"],
-            option="--classifier-eta-multiplier",
-            value=multiplier,
-        )
-        edge_raw = run_real_configuration(
-            args.out / f"real_edge_{key}",
-            algorithms=["bbm_N=100", "osboost_N=100"],
-            option="--edge-multiplier",
-            value=multiplier,
-        )
-        for stream in real_results:
-            real_results[stream][f"ogb_step_{key}"] = ogb_raw[stream]["ogb_N=100"]
-            real_results[stream][f"bbm_eta_{key}"] = eta_raw[stream]["bbm_N=100"]
-            real_results[stream][f"adaboost_ol_eta_{key}"] = eta_raw[stream]["adaboost_ol_N=100"]
-            real_results[stream][f"osboost_eta_{key}"] = eta_raw[stream]["osboost_N=100"]
-            real_results[stream][f"bbm_edge_{key}"] = edge_raw[stream]["bbm_N=100"]
-            real_results[stream][f"osboost_edge_{key}"] = edge_raw[stream]["osboost_N=100"]
 
     with (args.out / "aggregate.json").open("w") as handle:
         json.dump(
             {
-                "group_subset_sensitivity": results,
+                "binary_aggregation_sensitivity": results,
                 "real_sensitivity": real_results,
             },
             handle,

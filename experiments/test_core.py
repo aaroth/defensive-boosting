@@ -23,7 +23,7 @@ from .metrics import (
 )
 from .real_streams import _hashed_frame, _online_standardize_matrix
 from .run import build_algorithms
-from .streams import group_subset_heterogeneous_margin
+from .streams import binary_aggregation, group_subset_heterogeneous_margin
 
 
 class ConstantGainOracle:
@@ -187,6 +187,31 @@ class StreamConstructionTest(unittest.TestCase):
 
         diagnostics = offline_span_diagnostics(stream)
         expected = (1.0 - delta) ** 2 / (8.0 * (1.0 + delta**2))
+        self.assertAlmostEqual(diagnostics["span_squared_loss"], expected, places=10)
+
+    def test_binary_aggregation_edge_and_span_obstruction(self) -> None:
+        stream = binary_aggregation(
+            T=400,
+            n_pairs=20,
+            correct_orientations=12,
+            seed=5,
+        )
+        signed_values = stream.y[:, None] * stream.X
+        edge = 0.2
+
+        self.assertTrue(np.all(np.isin(stream.X, [-1.0, 1.0])))
+        np.testing.assert_allclose(np.mean(signed_values, axis=1), 0.0, atol=1e-12)
+        self.assertTrue(np.all(np.any(signed_values < 0.0, axis=0)))
+        uniform_vote = np.where(np.mean(stream.X, axis=1) >= 0.0, 1, -1)
+        self.assertAlmostEqual(np.mean(uniform_vote != stream.y), 0.5)
+
+        rng = np.random.default_rng(17)
+        for _ in range(50):
+            weights = rng.uniform(0.0, 1.0, size=stream.T)
+            self.assertGreaterEqual(hard_core_edge(stream, weights), edge - 1e-12)
+
+        diagnostics = offline_span_diagnostics(stream)
+        expected = (1.0 - edge) ** 2 / (8.0 * (1.0 + edge**2))
         self.assertAlmostEqual(diagnostics["span_squared_loss"], expected, places=10)
 
 

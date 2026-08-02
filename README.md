@@ -64,12 +64,12 @@ The targets correspond to the paper as follows:
 | Target | Paper results |
 | --- | --- |
 | `synthetic` | Main complementary-regime and hard-core diagnostics; complete synthetic appendix |
-| `sweep` | Ensemble-size comparison on the group-subset stream |
+| `sweep` | Ensemble-size comparison on the binary aggregation stream |
 | `real` | Four naturally ordered binary streams and the classification row of the introductory summary figure |
 | `adaptive-real` | Strongly adaptive comparison on the four real streams |
 | `drift` | INSECTS controlled-drift results and local hard-core diagnostics |
 | `regression` | Three chronological bounded-regression streams and the regression row of the introductory summary figure |
-| `sensitivity` | One-at-a-time checks over 16-fold parameter ranges on the group-subset, Electricity, and Occupancy streams |
+| `sensitivity` | One-at-a-time checks over 16-fold parameter ranges on the binary aggregation, Electricity, and Occupancy streams |
 
 By default, the script runs the unit tests, compares each `aggregate.json`
 with the corresponding file in `experiments/reference/`, and copies the

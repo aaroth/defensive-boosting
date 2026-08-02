@@ -32,7 +32,7 @@ TARGETS = {
         "--suite", "synthetic",
         "--T", "3000",
         "--seeds", *SEEDS,
-        "--stream-filter", "group_subset_heterogeneous",
+        "--stream-filter", "binary_aggregation",
         "--learner-sweep", "1", "5", "20", "100",
         "--gain-oracle", "second_order",
         "--out", str(OUT_ROOT / "sweep"),
@@ -76,8 +76,8 @@ REFERENCE_FILES = {
 FIGURE_MAP = {
     "synthetic": {
         "planted_decoy_margin_d=200_gamma=0.12__randomized_error.png": "planted_decoy_randomized_error.png",
-        "group_subset_heterogeneous_m=10_k=6_delta=0.6__classification_error.png": "group_subset_classification_error.png",
-        "group_subset_heterogeneous_m=10_k=6_delta=0.6__randomized_error.png": "group_subset_randomized_error.png",
+        "binary_aggregation_k=100_r=58__classification_error.png": "binary_aggregation_classification_error.png",
+        "binary_aggregation_k=100_r=58__randomized_error.png": "binary_aggregation_randomized_error.png",
         "linear_span_fallback_d=40__brier_loss.png": "linear_span_brier_loss.png",
         "mixed_linear_random_label_mixture_p=0.35__brier_loss.png": "random_label_mixture_brier_loss.png",
         "mixed_linear_random_label_mixture_p=0.35__certificate.png": "random_label_mixture_certificate.png",
@@ -85,7 +85,7 @@ FIGURE_MAP = {
         "bbm_vote_diagnostic.png": "bbm_vote_diagnostic.png",
     },
     "sweep": {
-        "group_subset_heterogeneous_m=10_k=6_delta=0.6__compute_sweep.png": "group_subset_compute_sweep.png",
+        "binary_aggregation_k=100_r=58__compute_sweep.png": "binary_aggregation_compute_sweep.png",
     },
     "real": {
         "real_bank_marketing__brier_loss.png": "real_bank_marketing_brier_loss.png",
